@@ -1,0 +1,357 @@
+/* Omni TOP Teacher App - Styles & Theme Engine */
+
+/* Responsive Fluid Root Scaling:
+   Adapts smoothly between 360px and 720px+ (Full HD emulator / low DPI screens),
+   ensuring cards, typography, badges, and spacing stay perfectly proportional and never microscopic. */
+html {
+  font-size: clamp(14px, calc(100vw / 400 * 16px), 24px);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Proportional micro-typography classes (scale with rem instead of fixed px) */
+.text-3xs {
+  font-size: 0.58rem !important;
+  line-height: 0.75rem !important;
+}
+.text-2xs {
+  font-size: 0.65rem !important;
+  line-height: 0.85rem !important;
+}
+.text-xs-plus {
+  font-size: 0.72rem !important;
+  line-height: 0.95rem !important;
+}
+
+/* Pure CSS Native Startup Splash Screen (Zero CDN dependency) */
+#startup-splash {
+  position: fixed;
+  inset: 0;
+  background-color: #0c1322;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  pointer-events: none;
+  transition: opacity 0.4s ease-out;
+}
+.splash-badge {
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin-bottom: 20px;
+}
+.splash-title {
+  font-size: 30px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.025em;
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+  line-height: 1.1;
+}
+.splash-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 6px;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Safe Area Insets for modern Edge-to-Edge phones (Android 15/16 & iOS) */
+#app-header {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.65rem) !important;
+}
+
+#app-footer {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.65rem) !important;
+}
+
+:root, [data-theme="dark"] {
+  --bg-app: #020617;
+  --bg-phone: #0c1322;
+  --bg-header: #0f172a;
+  --bg-subnav: #121c2e;
+  --bg-ribbon: #0e1626;
+  --bg-stream: #0c1322;
+  --bg-card: rgba(18, 26, 42, 0.9);
+  --bg-modal: #0c1322;
+  --bg-item: rgba(15, 23, 42, 0.8);
+  --bg-input: #121c2e;
+  --border-main: rgba(51, 65, 85, 0.6); /* slate-700/60 */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --ring-phone: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] {
+  --bg-app: #e2e8f0;
+  --bg-phone: #ffffff;
+  --bg-header: #ffffff;
+  --bg-subnav: #f8fafc;
+  --bg-ribbon: #f1f5f9;
+  --bg-stream: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-modal: #ffffff;
+  --bg-item: #f8fafc;
+  --bg-input: #f1f5f9;
+  --border-main: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --ring-phone: rgba(0, 0, 0, 0.08);
+}
+
+/* Light theme element overrides */
+[data-theme="light"] body {
+  background-color: var(--bg-phone) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] #phone-frame {
+  background-color: var(--bg-phone) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] #app-header {
+  background-color: var(--bg-header) !important;
+  border-color: var(--border-main) !important;
+}
+
+[data-theme="light"] #week-nav-bar {
+  background-color: var(--bg-subnav) !important;
+  border-color: var(--border-main) !important;
+}
+
+[data-theme="light"] #day-ribbon {
+  background-color: var(--bg-ribbon) !important;
+  border-color: var(--border-main) !important;
+}
+
+[data-theme="light"] #lessons-list {
+  background-color: var(--bg-stream) !important;
+}
+
+[data-theme="light"] #app-footer {
+  background-color: var(--bg-header) !important;
+  border-color: var(--border-main) !important;
+}
+
+[data-theme="light"] #location-btn {
+  background-color: var(--bg-subnav) !important;
+  border-color: var(--border-main) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .glass-panel {
+  background-color: var(--bg-card) !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .glass-panel:hover {
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .theme-modal-box {
+  background-color: var(--bg-modal) !important;
+  border-color: #e2e8f0 !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-theme="light"] .theme-item-bg {
+  background-color: var(--bg-item) !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .theme-input-bg {
+  background-color: var(--bg-input) !important;
+  border-color: #cbd5e1 !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .theme-text-primary {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .theme-text-secondary {
+  color: #475569 !important;
+}
+
+[data-theme="light"] .theme-border {
+  border-color: #e2e8f0 !important;
+}
+
+/* Theme Adaptive Navigation Buttons (◀ and ▶) */
+.theme-nav-btn {
+  background-color: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+}
+.theme-nav-btn:hover {
+  background-color: #334155;
+  color: #ffffff;
+}
+[data-theme="light"] .theme-nav-btn {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme="light"] .theme-nav-btn:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Theme Adaptive Modal Close Button (✕) */
+.theme-close-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: #94a3b8;
+  cursor: pointer;
+}
+.theme-close-btn:hover {
+  background-color: #334155;
+  color: #ffffff;
+}
+[data-theme="light"] .theme-close-btn {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+[data-theme="light"] .theme-close-btn:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Theme Adaptive Secondary Button (e.g. "Отмена", "Закрыть") */
+.theme-btn-secondary {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  cursor: pointer;
+}
+.theme-btn-secondary:hover {
+  background-color: #334155;
+}
+[data-theme="light"] .theme-btn-secondary {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+}
+[data-theme="light"] .theme-btn-secondary:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Theme Adaptive Auth / Logout Button */
+[data-theme="light"] #auth-action-btn {
+  background-color: #fff1f2 !important;
+  color: #e11d48 !important;
+  border: 1px solid #fecdd3 !important;
+}
+[data-theme="light"] #auth-action-btn:hover {
+  background-color: #ffe4e6 !important;
+}
+[data-theme="light"] #auth-action-btn svg {
+  color: #e11d48 !important;
+}
+
+/* Theme Adaptive Role Badge */
+.theme-role-badge {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+[data-theme="light"] .theme-role-badge {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border-color: #bfdbfe !important;
+  font-weight: 700 !important;
+}
+
+/* Week status badge */
+[data-theme="light"] #week-status-badge {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border-color: #bfdbfe !important;
+  font-weight: 600 !important;
+}
+
+.glass-panel {
+  background: rgba(18, 26, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Sleek Scrollbar for lessons-list & modals */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 9999px;
+  margin: 6px 0;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.35);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.65);
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(59, 130, 246, 0.35) rgba(15, 23, 42, 0.4);
+}
+
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.6);
+}
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .custom-scrollbar {
+  scrollbar-color: rgba(59, 130, 246, 0.4) rgba(226, 232, 240, 0.6);
+}
+
+/* Horizontal scroll styling */
+.horizontal-scroll {
+  cursor: grab;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+.horizontal-scroll:active {
+  cursor: grabbing;
+}

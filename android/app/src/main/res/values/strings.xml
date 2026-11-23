@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Omni TOP</string>
+    <string name="title_activity_main">Omni TOP</string>
+    <string name="package_name">ru.topacademy.omni</string>
+    <string name="custom_url_scheme">ru.topacademy.omni</string>
+    <string name="widget_timeline_name">Расписание (Таймлайн)</string>
+    <string name="widget_timeline_desc">Таймлайн пар на день с подсветкой текущего занятия</string>
+</resources>

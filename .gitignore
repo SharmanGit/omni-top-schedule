@@ -1,0 +1,58 @@
+# ==============================================================================
+# Omni TOP Git Ignore
+# ==============================================================================
+
+# Built Android Applications & Packages
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+
+# Android / Gradle Build Directories
+.gradle/
+build/
+*/build/
+**/build/
+android/.gradle/
+android/app/build/
+
+# Local Configuration (Android SDK path, machine-specific)
+local.properties
+android/local.properties
+
+# Android Studio / IntelliJ / Eclipse / VS Code
+.idea/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+.vscode/
+
+# Keystores & Signing Keys (Never commit production keys)
+*.jks
+*.keystore
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sensitive Session Dumps, Test Databases & Scratch Files
+data/
+scratch/
+scripts/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+omni_session*.json
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
