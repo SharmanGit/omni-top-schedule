@@ -26,12 +26,15 @@ android {
         }
     }
 
+    def appVersionName = project.findProperty("appVersionName") ?: "2.0.0"
+    def appVersionCode = (project.findProperty("appVersionCode") ?: "2").toInteger()
+
     defaultConfig {
         applicationId "ru.topacademy.omni"
         minSdk 26
         targetSdk 36
-        versionCode 2
-        versionName "2.0-native"
+        versionCode appVersionCode
+        versionName appVersionName
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

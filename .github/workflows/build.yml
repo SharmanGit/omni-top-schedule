@@ -1,20 +1,65 @@
-name: Build Android Release
+name: Build & Release Android App
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Name (e.g. 2.0.0)'
+        required: false
+        default: '2.0.0'
+      create_release:
+        description: 'Create GitHub Release?'
+        type: boolean
+        default: false
+      release_notes:
+        description: 'Custom Release Notes (optional, leave empty for auto-generated changelog)'
+        required: false
+        default: ''
   push:
     branches:
       - main
       - master
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build Release APK
+    name: Build & Release APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Version
+        id: versioning
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            echo "VERSION=${TAG_VERSION}" >> $GITHUB_ENV
+            echo "TAG_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+            echo "IS_RELEASE=true" >> $GITHUB_ENV
+          elif [[ "${{ inputs.create_release }}" == "true" ]]; then
+            INPUT_VER="${{ inputs.version }}"
+            INPUT_VER="${INPUT_VER#v}"
+            echo "VERSION=${INPUT_VER}" >> $GITHUB_ENV
+            echo "TAG_NAME=v${INPUT_VER}" >> $GITHUB_ENV
+            echo "IS_RELEASE=true" >> $GITHUB_ENV
+          else
+            INPUT_VER="${{ inputs.version }}"
+            if [ -z "$INPUT_VER" ]; then
+              INPUT_VER="2.0.0"
+            fi
+            INPUT_VER="${INPUT_VER#v}"
+            echo "VERSION=${INPUT_VER}" >> $GITHUB_ENV
+            echo "TAG_NAME=v${INPUT_VER}" >> $GITHUB_ENV
+            echo "IS_RELEASE=false" >> $GITHUB_ENV
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -30,11 +75,35 @@ jobs:
 
       - name: Build Release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          ./gradlew assembleRelease \
+            -PappVersionName="${{ env.VERSION }}" \
+            -PappVersionCode="${{ github.run_number }}" \
+            --no-daemon
 
-      - name: Upload Release APK
+      - name: Prepare APK Artifacts
+        run: |
+          mkdir -p release-artifacts
+          cp android/app/build/outputs/apk/release/app-release.apk release-artifacts/OmniTOP-v${{ env.VERSION }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk release-artifacts/OmniTOP.apk
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OmniTOP-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: OmniTOP-v${{ env.VERSION }}
+          path: release-artifacts/*.apk
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: env.IS_RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Omni TOP v${{ env.VERSION }}"
+          tag_name: ${{ env.TAG_NAME }}
+          body: ${{ inputs.release_notes }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/OmniTOP-v${{ env.VERSION }}.apk
+            release-artifacts/OmniTOP.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
