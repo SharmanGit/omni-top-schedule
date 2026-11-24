@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const { parseOmniSchedule, pluralizeLessons } = require('./omniParser');
@@ -7,7 +9,21 @@ const { parseOmniSchedule, pluralizeLessons } = require('./omniParser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost', 'http://localhost:3000', 'capacitor://localhost'];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -654,11 +670,20 @@ async function getBranchSessionCookie(baseCookieStr, idLocalHash, cityId) {
   }
 }
 
+// Rate limit authentication attempts to mitigate brute-force
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Слишком много попыток входа. Попробуйте позже.' }
+});
+
 /**
  * 3. POST /api/auth/login
  * Real authentication endpoint against Omni TOP with dynamic branch discovery
  */
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ success: false, error: 'Введите логин и пароль' });
@@ -739,11 +764,11 @@ app.post('/api/auth/logout', (req, res) => {
 
 
 // Start Server
-app.listen(PORT, () => {
+app.listen(PORT, '127.0.0.1', () => {
   console.log(`====================================================`);
-  console.log(`👨‍🏫 Omni TOP Multi-Branch Schedule App running at http://localhost:${PORT}`);
-  console.log(`   - Schedule API: http://localhost:${PORT}/api/teacher/schedule`);
-  console.log(`   - Tasks API: http://localhost:${PORT}/api/teacher/tasks`);
-  console.log(`   - Real Auth API: http://localhost:${PORT}/api/auth/login`);
+  console.log(`👨‍🏫 Omni TOP Multi-Branch Schedule App running at http://127.0.0.1:${PORT}`);
+  console.log(`   - Schedule API: http://127.0.0.1:${PORT}/api/teacher/schedule`);
+  console.log(`   - Tasks API: http://127.0.0.1:${PORT}/api/teacher/tasks`);
+  console.log(`   - Real Auth API: http://127.0.0.1:${PORT}/api/auth/login`);
   console.log(`====================================================`);
 });
