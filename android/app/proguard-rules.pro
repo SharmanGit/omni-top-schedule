@@ -6,6 +6,7 @@
 -keep class ru.topacademy.omni.data.local.dao.** { *; }
 -keep class ru.topacademy.omni.data.local.entity.** { *; }
 -keep class ru.topacademy.omni.data.local.OmniDatabase_Impl { *; }
+-keep class ru.topacademy.omni.data.db.** { *; }
 
 # Domain & Network Models (Gson / Reflection / Data classes)
 -keep class ru.topacademy.omni.domain.model.** { *; }
