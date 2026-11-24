@@ -8,6 +8,7 @@ const { parseOmniSchedule, pluralizeLessons } = require('./omniParser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -23,7 +24,20 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
+      imgSrc:     ["'self'", "data:", "https://omni.top-academy.ru"],
+      connectSrc: ["'self'"],
+      fontSrc:    ["'self'"],
+      objectSrc:  ["'none'"],
+      frameAncestors: ["'none'"],
+    }
+  }
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -764,11 +778,11 @@ app.post('/api/auth/logout', (req, res) => {
 
 
 // Start Server
-app.listen(PORT, '127.0.0.1', () => {
+app.listen(PORT, HOST, () => {
   console.log(`====================================================`);
-  console.log(`👨‍🏫 Omni TOP Multi-Branch Schedule App running at http://127.0.0.1:${PORT}`);
-  console.log(`   - Schedule API: http://127.0.0.1:${PORT}/api/teacher/schedule`);
-  console.log(`   - Tasks API: http://127.0.0.1:${PORT}/api/teacher/tasks`);
-  console.log(`   - Real Auth API: http://127.0.0.1:${PORT}/api/auth/login`);
+  console.log(`👨‍🏫 Omni TOP Multi-Branch Schedule App running at http://${HOST}:${PORT}`);
+  console.log(`   - Schedule API: http://${HOST}:${PORT}/api/teacher/schedule`);
+  console.log(`   - Tasks API: http://${HOST}:${PORT}/api/teacher/tasks`);
+  console.log(`   - Real Auth API: http://${HOST}:${PORT}/api/auth/login`);
   console.log(`====================================================`);
 });

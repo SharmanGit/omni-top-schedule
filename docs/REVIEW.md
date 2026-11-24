@@ -157,3 +157,20 @@ buildTypes { release { signingConfig signingConfigs.release } }
 Статический анализ исходников `main` (android/), `app/build.gradle`, манифеста,
 proguard, CI-workflow, web-MVP (server.js, public/, capacitor.config.json); сверка с
 собранным APK `2.0-native` (apktool/jadx/apksig) для подтверждения подписи и состава.
+
+---
+
+## Fixes applied in this PR
+
+| # | File | Issue | Status |
+|---|------|-------|--------|
+| F1 | `server.js` | `helmet({ contentSecurityPolicy: false })` - CSP was disabled; now enabled with strict directives | Fixed |
+| F2 | `android/app/build.gradle` | `signingConfig` read `storePassword/keyAlias/keyPassword` without `keystorePropertiesFile.exists()` check - NPE in CI | Fixed |
+| F3 | `server.js` | `app.listen(PORT, '127.0.0.1')` hardcoded - now uses `process.env.HOST \|\| '127.0.0.1'` | Fixed |
+
+### Open tasks (out of scope for this PR)
+
+- [ ] S8: XSS via innerHTML in public/app.js - replace with textContent / DOMPurify
+- [ ] S7: Session token in localStorage - move to httpOnly cookie
+- [ ] S6: capacitor.config.json androidScheme http + cleartext - switch to HTTPS
+- [ ] Add unit tests for OmniScheduleParser and LessonStateCalculator
