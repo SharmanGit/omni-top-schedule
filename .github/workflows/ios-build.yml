@@ -1,6 +1,9 @@
 name: iOS Build (Unsigned IPA)
 
 on:
+  push:
+    branches:
+      - ios-test
   workflow_dispatch:
 
 jobs:
