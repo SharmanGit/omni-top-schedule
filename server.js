@@ -41,16 +41,31 @@ app.use(helmet({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Teacher Profile from Omni TOP
-const teacherProfile = {
-  id: 226,
-  firstName: "Андрей",
-  lastName: "Винокуров",
-  name: "Андрей Винокуров",
-  role: "Преподаватель",
-  email: "vinokurov_a@t.top-academy.ru",
-  avatar: "https://omni.top-academy.ru/img/avatarka.svg"
-};
+// Teacher Profile helper: dynamically build profile from username or Omni dashboard
+function deriveTeacherName(username) {
+  if (!username) return 'Преподаватель';
+  const clean = username.split('@')[0].replace(/[._]/g, ' ');
+  return clean.split(' ')
+    .filter(Boolean)
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(' ') || 'Преподаватель';
+}
+
+function buildTeacherProfile(username, idLocalHash, parsedName = null) {
+  const fullName = parsedName || deriveTeacherName(username);
+  const parts = fullName.split(' ');
+  return {
+    id: idLocalHash || 0,
+    firstName: parts[0] || fullName,
+    lastName: parts.slice(1).join(' ') || '',
+    name: fullName,
+    role: "Преподаватель",
+    email: username || "",
+    avatar: "https://omni.top-academy.ru/img/avatarka.svg"
+  };
+}
+
+let teacherProfile = buildTeacherProfile(null, null);
 
 function formatDaysAgo(days) {
   const n = Math.abs(days);
@@ -98,6 +113,9 @@ function loadPersistedSession() {
           ...data,
           branches: Array.isArray(data.branches) ? data.branches : []
         };
+        if (data.username) {
+          teacherProfile = buildTeacherProfile(data.username, data.IdLocalHash);
+        }
         console.log(`[AUTH] Restored active Omni TOP live session for ${data.username} (${activeOmniSession.branches.length} branches)`);
       }
     } catch (e) {
@@ -116,7 +134,8 @@ function saveSession(session) {
 }
 
 function clearSession() {
-  activeOmniSession = { cookieStr: null, IdLocalHash: null, username: null };
+  activeOmniSession = { cookieStr: null, IdLocalHash: null, username: null, branches: [] };
+  teacherProfile = buildTeacherProfile(null, null);
   if (fs.existsSync(SESSION_FILE)) {
     try {
       fs.unlinkSync(SESSION_FILE);
@@ -618,9 +637,9 @@ async function authenticateOmniUser(username, password, cityId = null) {
 }
 
 /**
- * Dynamically discover all accessible branches for the authenticated user from Omni TOP HTML dashboard
+ * Dynamically discover all accessible branches and teacher name from Omni TOP HTML dashboard
  */
-async function discoverUserBranches(cookieStr, idLocalHash) {
+async function discoverUserBranchesAndProfile(cookieStr, idLocalHash) {
   try {
     const res = await fetch('https://omni.top-academy.ru/', {
       headers: {
@@ -629,8 +648,12 @@ async function discoverUserBranches(cookieStr, idLocalHash) {
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
-    if (!res.ok) return [];
+    if (!res.ok) return { branches: [], teacherName: null };
     const html = await res.text();
+    let teacherName = null;
+    const nameMatch = html.match(/class="[^"]*user-name[^"]*"[^>]*>([^<]+)</i) || html.match(/class="[^"]*fio[^"]*"[^>]*>([^<]+)</i);
+    if (nameMatch) teacherName = nameMatch[1].trim();
+
     const menuMatch = html.match(/id="cityes"[^>]*>([\s\S]*?)<\/md-menu-content>/i);
     const searchHtml = menuMatch ? menuMatch[1] : html;
     const matches = Array.from(searchHtml.matchAll(/changeCity\((\d+)\)[^>]*>\s*([^<]+)\s*</g));
@@ -644,11 +667,16 @@ async function discoverUserBranches(cookieStr, idLocalHash) {
         branches.push({ cityId, cityName });
       }
     }
-    return branches;
+    return { branches, teacherName };
   } catch (err) {
     console.warn('[AUTH] Failed to dynamically discover branches:', err.message);
-    return [];
+    return { branches: [], teacherName: null };
   }
+}
+
+async function discoverUserBranches(cookieStr, idLocalHash) {
+  const result = await discoverUserBranchesAndProfile(cookieStr, idLocalHash);
+  return result.branches;
 }
 
 /**
@@ -711,7 +739,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     console.log(`[AUTH] Login SUCCESS for ${username}! Dynamically discovering user branches from Omni TOP...`);
     
     // 2. Dynamically extract all available branches for this teacher from #cityes menu
-    let discovered = await discoverUserBranches(authMain.cookieStr, authMain.IdLocalHash);
+    let { branches: discovered, teacherName } = await discoverUserBranchesAndProfile(authMain.cookieStr, authMain.IdLocalHash);
     if (!discovered || discovered.length === 0) {
       console.log('[AUTH] No branches menu found in HTML, falling back to known user branches');
       discovered = [
@@ -741,6 +769,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       username: username,
       branches: branchSessions
     };
+    teacherProfile = buildTeacherProfile(username, authMain.IdLocalHash, teacherName);
     saveSession(activeOmniSession);
 
     return res.json({

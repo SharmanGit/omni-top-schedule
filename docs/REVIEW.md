@@ -167,6 +167,8 @@ proguard, CI-workflow, web-MVP (server.js, public/, capacitor.config.json); св
 | F1 | `server.js` | `helmet({ contentSecurityPolicy: false })` - CSP was disabled; now enabled with strict directives | Fixed |
 | F2 | `android/app/build.gradle` | `signingConfig` read `storePassword/keyAlias/keyPassword` without `keystorePropertiesFile.exists()` check - NPE in CI | Fixed |
 | F3 | `server.js` | `app.listen(PORT, '127.0.0.1')` hardcoded - now uses `process.env.HOST \|\| '127.0.0.1'` | Fixed |
+| F4 | `android/.../LoginScreen.kt` | Added password visibility toggle and keyboard actions (`ImeAction.Next`, `ImeAction.Done`) for mobile input usability | Fixed |
+| F5 | `server.js` | Removed hardcoded teacher personal data; profile is now dynamically constructed and updated on login/restore/logout | Fixed |
 
 ### Open tasks (out of scope for this PR)
 
