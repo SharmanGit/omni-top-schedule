@@ -2,6 +2,8 @@ package ru.topacademy.omni.data.network
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import ru.topacademy.omni.domain.model.Branch
@@ -22,9 +24,26 @@ data class UserSession(
 )
 
 class OmniSessionManager(context: Context) {
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("omni_native_session", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = createEncryptedPrefs(context)
     private val gson = Gson()
+
+    private fun createEncryptedPrefs(context: Context): SharedPreferences {
+        return try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                "omni_native_session_enc",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (_: Exception) {
+            // Fallback on devices with broken Keystore hardware
+            context.getSharedPreferences("omni_native_session", Context.MODE_PRIVATE)
+        }
+    }
 
     fun saveSession(session: UserSession) {
         prefs.edit()

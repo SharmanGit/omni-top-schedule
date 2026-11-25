@@ -321,7 +321,7 @@ fun ProfileBottomSheet(
                         try {
                             val client = OkHttpClient()
                             val request = Request.Builder()
-                                .url("https://api.github.com/repos/nikgohn/omni-top-schedule/releases/latest")
+                                .url("https://api.github.com/repos/SharmanGit/omni-top-schedule/releases/latest")
                                 .header("Accept", "application/vnd.github.v3+json")
                                 .header("User-Agent", "OmniTOP-Android")
                                 .build()
