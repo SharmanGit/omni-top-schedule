@@ -24,6 +24,7 @@ data class UserSession(
 )
 
 class OmniSessionManager(context: Context) {
+    private var isEncryptedStorage: Boolean = false
     private val prefs: SharedPreferences = createEncryptedPrefs(context)
     private val gson = Gson()
 
@@ -32,15 +33,18 @@ class OmniSessionManager(context: Context) {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
-            EncryptedSharedPreferences.create(
+            val enc = EncryptedSharedPreferences.create(
                 context,
                 "omni_native_session_enc",
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
+            isEncryptedStorage = true
+            enc
         } catch (_: Exception) {
-            // Fallback on devices with broken Keystore hardware
+            // Fallback on devices with broken Keystore hardware; never store plaintext passwords here
+            isEncryptedStorage = false
             context.getSharedPreferences("omni_native_session", Context.MODE_PRIVATE)
         }
     }
@@ -52,6 +56,11 @@ class OmniSessionManager(context: Context) {
     }
 
     fun saveCredentials(username: String, pass: String) {
+        if (!isEncryptedStorage) {
+            // Refuse to persist plaintext password if Keystore encryption is unavailable
+            prefs.edit().remove(KEY_USER).remove(KEY_PASS).apply()
+            return
+        }
         prefs.edit()
             .putString(KEY_USER, username)
             .putString(KEY_PASS, pass)

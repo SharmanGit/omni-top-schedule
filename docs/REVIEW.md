@@ -175,6 +175,7 @@ proguard, CI-workflow, web-MVP (server.js, public/, capacitor.config.json); св
 | F9 | `server.js` | Replaced global single-user `activeOmniSession` / `omni_session.json` with per-user isolated `sessionsBySid` store keyed by `HttpOnly` `omni_sid` cookie (S9) | Fixed |
 | F10 | `server.js`, `OmniRepository.kt`, `android/app/build.gradle` | Gated verbose/PII logs behind `NODE_ENV !== 'production'` (`debugLog`) and `BuildConfig.DEBUG` (`RepoLog`) | Fixed |
 | F11 | `package.json`, `server.js` | Served root `omniParser.js` directly in Express and added `sync:parser` / `prestart` scripts to keep `public/omniParser.js` in sync | Fixed |
+| F12 | `OmniSessionManager.kt`, `.github/workflows/build.yml`, `android/app/build.gradle` | Refused plaintext password persistence when Keystore fallback triggers; added GitHub Secrets release-signing step and v2/v3 signing flags | Fixed |
 
 ### Open tasks (out of scope for this PR)
 
