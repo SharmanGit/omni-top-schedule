@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
-const { parseOmniSchedule, pluralizeLessons } = require('./omniParser');
+const { parseOmniSchedule, pluralizeLessons, toBranchDate } = require('./omniParser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -370,14 +370,14 @@ function toMinutes(hhmm) {
   return (h || 0) * 60 + (m || 0);
 }
 
-// Compute live state of lesson against current date & time
+// Compute live state of lesson against current date & time in the branch's timezone
 function computeLessonState(lesson, dayIsoDate, now) {
   if (!lesson.startTime || !lesson.endTime || !dayIsoDate) {
     return { status: 'planned', isCurrent: false, label: 'Запланировано' };
   }
 
-  const lessonStart = new Date(`${dayIsoDate}T${lesson.startTime}:00`);
-  const lessonEnd = new Date(`${dayIsoDate}T${lesson.endTime}:00`);
+  const lessonStart = toBranchDate(dayIsoDate, lesson.startTime, lesson.branchName) || new Date(`${dayIsoDate}T${lesson.startTime}:00`);
+  const lessonEnd = toBranchDate(dayIsoDate, lesson.endTime, lesson.branchName) || new Date(`${dayIsoDate}T${lesson.endTime}:00`);
 
   if (now >= lessonStart && now < lessonEnd) {
     const elapsed = Math.floor((now - lessonStart) / 60000);

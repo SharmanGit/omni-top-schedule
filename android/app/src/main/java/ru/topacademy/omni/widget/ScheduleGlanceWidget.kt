@@ -36,7 +36,9 @@ import androidx.glance.unit.ColorProvider
 import ru.topacademy.omni.MainActivity
 import ru.topacademy.omni.data.db.OmniDatabase
 import ru.topacademy.omni.domain.model.Lesson
+import ru.topacademy.omni.domain.util.BranchTimeZoneResolver
 import ru.topacademy.omni.ui.screens.LessonDialogActivity
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -49,31 +51,28 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db = OmniDatabase.getInstance(context)
+        val nowInstant = Instant.now()
         val today = LocalDate.now()
         val todayIso = today.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-        val nowTime = LocalTime.now()
+        val minIso = today.minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
-        // Fetch upcoming lessons starting today
-        val allUpcomingEntities = db.lessonDao().getUpcomingLessonsSync(todayIso)
+        // Fetch upcoming lessons (including yesterday in case another branch is in an earlier timezone)
+        val allUpcomingEntities = db.lessonDao().getUpcomingLessonsSync(minIso)
         val allLessons = allUpcomingEntities.map { it.toDomain() }
 
-        // Find currently running lesson
+        // Find currently running lesson using each branch's local timezone
         val activeLesson = allLessons.firstOrNull { lesson ->
-            lesson.date == todayIso && isLessonActive(lesson, nowTime)
+            val start = BranchTimeZoneResolver.lessonStartInstant(lesson) ?: return@firstOrNull false
+            val end = BranchTimeZoneResolver.lessonEndInstant(lesson) ?: return@firstOrNull false
+            !nowInstant.isBefore(start) && !nowInstant.isAfter(end)
         }
 
-        // Filter upcoming lessons that haven't ended yet
+        // Filter upcoming lessons that haven't ended yet in their branch's timezone, sorted chronologically by Instant
         val futureLessons = allLessons.filter { lesson ->
             if (lesson.id == activeLesson?.id) return@filter false
-            if (lesson.date > todayIso) {
-                true
-            } else if (lesson.date == todayIso) {
-                val end = parseTime(lesson.endTime)
-                end != null && nowTime.isBefore(end)
-            } else {
-                false
-            }
-        }.sortedWith(compareBy({ it.date }, { it.startTime }))
+            val end = BranchTimeZoneResolver.lessonEndInstant(lesson) ?: return@filter false
+            nowInstant.isBefore(end)
+        }.sortedBy { BranchTimeZoneResolver.lessonStartInstant(it) ?: Instant.MAX }
 
         val candidateLessons = mutableListOf<Lesson>()
         if (activeLesson != null) {

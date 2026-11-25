@@ -2,8 +2,11 @@ package ru.topacademy.omni.domain.util
 
 import ru.topacademy.omni.domain.model.Lesson
 import ru.topacademy.omni.domain.model.LessonStatus
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 object LessonStateCalculator {
@@ -11,58 +14,63 @@ object LessonStateCalculator {
     fun determineStatus(
         lesson: Lesson,
         todayLessons: List<Lesson>,
-        nowDate: LocalDate = LocalDate.now(),
-        nowTime: LocalTime = LocalTime.now()
+        nowInstant: Instant = Instant.now()
     ): LessonStatus {
+        val branchZone = BranchTimeZoneResolver.resolveZoneId(lesson.branchName)
+        val branchToday = nowInstant.atZone(branchZone).toLocalDate()
+
         val lessonDate = try {
             LocalDate.parse(lesson.date, DateTimeFormatter.ISO_LOCAL_DATE)
         } catch (_: Exception) {
             return LessonStatus.SCHEDULED
         }
 
-        // Past days
-        if (lessonDate.isBefore(nowDate)) {
+        // Past days in branch's local calendar
+        if (lessonDate.isBefore(branchToday)) {
             return if (lesson.isAttendanceMarked) LessonStatus.PAST_MARKED else LessonStatus.PAST_UNMARKED
         }
 
-        // Future days
-        if (lessonDate.isAfter(nowDate)) {
+        // Future days in branch's local calendar
+        if (lessonDate.isAfter(branchToday)) {
             return LessonStatus.SCHEDULED
         }
 
-        // Today
-        val start = parseTime(lesson.startTime)
-        val end = parseTime(lesson.endTime)
+        // Today in branch's local timezone: compare exact Instants
+        val startInstant = BranchTimeZoneResolver.lessonStartInstant(lesson)
+        val endInstant = BranchTimeZoneResolver.lessonEndInstant(lesson)
 
-        if (start != null && end != null) {
-            if (!nowTime.isBefore(start) && !nowTime.isAfter(end)) {
+        if (startInstant != null && endInstant != null) {
+            if (!nowInstant.isBefore(startInstant) && !nowInstant.isAfter(endInstant)) {
                 return LessonStatus.LIVE_ACTIVE
             }
-            if (nowTime.isAfter(end)) {
+            if (nowInstant.isAfter(endInstant)) {
                 return if (lesson.isAttendanceMarked) LessonStatus.PAST_MARKED else LessonStatus.PAST_UNMARKED
             }
         }
 
-        // Check if this is the next upcoming lesson today
-        val upcomingToday = todayLessons
-            .filter { parseTime(it.startTime)?.isAfter(nowTime) == true }
-            .sortedBy { parseTime(it.startTime) }
+        // Find the chronologically earliest upcoming lesson across all branches by Instant
+        val nextUpcoming = todayLessons
+            .mapNotNull { candidate ->
+                val cStart = BranchTimeZoneResolver.lessonStartInstant(candidate) ?: return@mapNotNull null
+                if (cStart.isAfter(nowInstant)) candidate to cStart else null
+            }
+            .minByOrNull { it.second }
+            ?.first
 
-        if (upcomingToday.firstOrNull()?.id == lesson.id) {
+        if (nextUpcoming?.id == lesson.id) {
             return LessonStatus.NEXT_UPCOMING
         }
 
         return LessonStatus.SCHEDULED
     }
 
-    private fun parseTime(timeStr: String): LocalTime? {
-        return try {
-            val parts = timeStr.trim().split(":")
-            if (parts.size >= 2) {
-                LocalTime.of(parts[0].toInt(), parts[1].toInt())
-            } else null
-        } catch (_: Exception) {
-            null
-        }
+    fun determineStatus(
+        lesson: Lesson,
+        todayLessons: List<Lesson>,
+        nowDate: LocalDate,
+        nowTime: LocalTime
+    ): LessonStatus {
+        val instant = LocalDateTime.of(nowDate, nowTime).atZone(ZoneId.systemDefault()).toInstant()
+        return determineStatus(lesson, todayLessons, instant)
     }
 }

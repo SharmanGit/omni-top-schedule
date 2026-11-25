@@ -257,13 +257,16 @@ const OmniClient = (() => {
     }
   }
 
-  // Compute live state of lesson against current time
+  // Compute live state of lesson against current time in the branch's timezone
   function computeLessonState(lesson, dayIsoDate, now) {
     if (!lesson.startTime || !lesson.endTime || !dayIsoDate) {
       return { status: 'planned', isCurrent: false, label: 'Запланировано' };
     }
-    const lessonStart = new Date(`${dayIsoDate}T${lesson.startTime}:00`);
-    const lessonEnd = new Date(`${dayIsoDate}T${lesson.endTime}:00`);
+    const toBranch = window.OmniParser && typeof window.OmniParser.toBranchDate === 'function'
+      ? window.OmniParser.toBranchDate
+      : null;
+    const lessonStart = (toBranch && toBranch(dayIsoDate, lesson.startTime, lesson.branchName)) || new Date(`${dayIsoDate}T${lesson.startTime}:00`);
+    const lessonEnd = (toBranch && toBranch(dayIsoDate, lesson.endTime, lesson.branchName)) || new Date(`${dayIsoDate}T${lesson.endTime}:00`);
 
     if (now >= lessonStart && now < lessonEnd) {
       const elapsed = Math.floor((now - lessonStart) / 60000);

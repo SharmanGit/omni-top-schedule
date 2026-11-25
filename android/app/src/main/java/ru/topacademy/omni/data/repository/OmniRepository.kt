@@ -419,26 +419,23 @@ class OmniRepository(private val context: Context) {
         val weekDates = OmniScheduleParser.getWeekDates(weekOffset)
         if (dayOfWeek !in 1..7) return
         val targetDate = weekDates[dayOfWeek - 1].format(isoFormatter)
-        val todayIso = java.time.LocalDate.now().format(isoFormatter)
+        val tomorrowIso = java.time.LocalDate.now().plusDays(1).format(isoFormatter)
 
-        // Only check attendance for today or past days
-        if (targetDate > todayIso) return
+        // Only skip strictly future days (tomorrow+); today may span multiple branch timezones
+        if (targetDate > tomorrowIso) return
 
         val lessons = db.lessonDao().getLessonsForDateSync(targetDate)
-        val nowTime = java.time.LocalTime.now()
+        val nowInstant = java.time.Instant.now()
 
         android.util.Log.i("OmniRepo", "syncAttendanceForDay: checking ${lessons.size} lessons on $targetDate (day=$dayOfWeek)")
 
         for (lEntity in lessons) {
             val lesson = lEntity.toDomain()
-            val isPast = if (targetDate < todayIso) {
-                true
+            val endInstant = ru.topacademy.omni.domain.util.BranchTimeZoneResolver.lessonEndInstant(lesson)
+            val isPast = if (endInstant != null) {
+                nowInstant.isAfter(endInstant)
             } else {
-                val endTime = try {
-                    val parts = lesson.endTime.split(":")
-                    java.time.LocalTime.of(parts[0].toInt(), parts[1].toInt())
-                } catch (_: Exception) { null }
-                endTime != null && nowTime.isAfter(endTime)
+                targetDate < java.time.LocalDate.now().format(isoFormatter)
             }
 
             if (isPast) {

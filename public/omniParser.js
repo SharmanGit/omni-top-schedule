@@ -332,6 +332,144 @@ function parseOmniSchedule(rawData, fallbackWeekLabel = "26.10–01.11") {
   };
 }
 
+const CITY_TIMEZONE_ENTRIES = [
+  ['калининград', 'Europe/Kaliningrad'],
+  ['москва', 'Europe/Moscow'],
+  ['санкт-петербург', 'Europe/Moscow'],
+  ['петербург', 'Europe/Moscow'],
+  ['ярославль', 'Europe/Moscow'],
+  ['казань', 'Europe/Moscow'],
+  ['нижний новгород', 'Europe/Moscow'],
+  ['ростов', 'Europe/Moscow'],
+  ['краснодар', 'Europe/Moscow'],
+  ['воронеж', 'Europe/Moscow'],
+  ['волгоград', 'Europe/Moscow'],
+  ['сочи', 'Europe/Moscow'],
+  ['тула', 'Europe/Moscow'],
+  ['тверь', 'Europe/Moscow'],
+  ['рязань', 'Europe/Moscow'],
+  ['калуга', 'Europe/Moscow'],
+  ['белгород', 'Europe/Moscow'],
+  ['курск', 'Europe/Moscow'],
+  ['липецк', 'Europe/Moscow'],
+  ['ставрополь', 'Europe/Moscow'],
+  ['смоленск', 'Europe/Moscow'],
+  ['брянск', 'Europe/Moscow'],
+  ['орёл', 'Europe/Moscow'],
+  ['орел', 'Europe/Moscow'],
+  ['владимир', 'Europe/Moscow'],
+  ['иваново', 'Europe/Moscow'],
+  ['кострома', 'Europe/Moscow'],
+  ['тамбов', 'Europe/Moscow'],
+  ['пенза', 'Europe/Moscow'],
+  ['саранск', 'Europe/Moscow'],
+  ['чебоксары', 'Europe/Moscow'],
+  ['йошкар-ола', 'Europe/Moscow'],
+  ['киров', 'Europe/Moscow'],
+  ['архангельск', 'Europe/Moscow'],
+  ['мурманск', 'Europe/Moscow'],
+  ['петрозаводск', 'Europe/Moscow'],
+  ['новгород', 'Europe/Moscow'],
+  ['псков', 'Europe/Moscow'],
+  ['вологда', 'Europe/Moscow'],
+  ['сыктывкар', 'Europe/Moscow'],
+  ['махачкала', 'Europe/Moscow'],
+  ['грозный', 'Europe/Moscow'],
+  ['нальчик', 'Europe/Moscow'],
+  ['владикавказ', 'Europe/Moscow'],
+  ['симферополь', 'Europe/Moscow'],
+  ['севастополь', 'Europe/Moscow'],
+  ['минск', 'Europe/Minsk'],
+  ['самара', 'Europe/Samara'],
+  ['тольятти', 'Europe/Samara'],
+  ['саратов', 'Europe/Samara'],
+  ['ижевск', 'Europe/Samara'],
+  ['ульяновск', 'Europe/Samara'],
+  ['астрахань', 'Europe/Samara'],
+  ['екатеринбург', 'Asia/Yekaterinburg'],
+  ['челябинск', 'Asia/Yekaterinburg'],
+  ['уфа', 'Asia/Yekaterinburg'],
+  ['пермь', 'Asia/Yekaterinburg'],
+  ['тюмень', 'Asia/Yekaterinburg'],
+  ['сургут', 'Asia/Yekaterinburg'],
+  ['нижневартовск', 'Asia/Yekaterinburg'],
+  ['нижний тагил', 'Asia/Yekaterinburg'],
+  ['курган', 'Asia/Yekaterinburg'],
+  ['оренбург', 'Asia/Yekaterinburg'],
+  ['магнитогорск', 'Asia/Yekaterinburg'],
+  ['орск', 'Asia/Yekaterinburg'],
+  ['стерлитамак', 'Asia/Yekaterinburg'],
+  ['омск', 'Asia/Omsk'],
+  ['барнаул', 'Asia/Barnaul'],
+  ['бийск', 'Asia/Barnaul'],
+  ['рубцовск', 'Asia/Barnaul'],
+  ['новосибирск', 'Asia/Novosibirsk'],
+  ['томск', 'Asia/Tomsk'],
+  ['кемерово', 'Asia/Novokuznetsk'],
+  ['новокузнецк', 'Asia/Novokuznetsk'],
+  ['красноярск', 'Asia/Krasnoyarsk'],
+  ['абакан', 'Asia/Krasnoyarsk'],
+  ['кызыл', 'Asia/Krasnoyarsk'],
+  ['норильск', 'Asia/Krasnoyarsk'],
+  ['иркутск', 'Asia/Irkutsk'],
+  ['улан-удэ', 'Asia/Irkutsk'],
+  ['братск', 'Asia/Irkutsk'],
+  ['чита', 'Asia/Chita'],
+  ['благовещенск', 'Asia/Yakutsk'],
+  ['якутск', 'Asia/Yakutsk'],
+  ['владивосток', 'Asia/Vladivostok'],
+  ['хабаровск', 'Asia/Vladivostok'],
+  ['уссурийск', 'Asia/Vladivostok'],
+  ['комсомольск', 'Asia/Vladivostok'],
+  ['сахалин', 'Asia/Sakhalin'],
+  ['магадан', 'Asia/Magadan'],
+  ['камчат', 'Asia/Kamchatka']
+];
+
+function getBranchTimeZone(branchName = '') {
+  const lower = String(branchName || '').toLowerCase().trim();
+  if (lower) {
+    for (let i = 0; i < CITY_TIMEZONE_ENTRIES.length; i++) {
+      if (lower.includes(CITY_TIMEZONE_ENTRIES[i][0])) {
+        return CITY_TIMEZONE_ENTRIES[i][1];
+      }
+    }
+  }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * Convert a branch-local YYYY-MM-DD + HH:MM into an exact UTC Date instant.
+ */
+function toBranchDate(isoDate, hhmm, branchName = '') {
+  if (!isoDate || !hhmm) return null;
+  const dateParts = String(isoDate).trim().split('-').map(Number);
+  const timeParts = String(hhmm).trim().split(':').map(Number);
+  const [y, m, d] = dateParts;
+  const [hh, mm] = timeParts;
+  if (!y || !m || !d || isNaN(hh) || isNaN(mm)) return null;
+
+  const timeZone = getBranchTimeZone(branchName);
+  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, 0);
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(new Date(utcGuess));
+    const map = {};
+    parts.forEach(p => { map[p.type] = p.value; });
+    const tzAsUtc = Date.UTC(
+      Number(map.year), Number(map.month) - 1, Number(map.day),
+      Number(map.hour), Number(map.minute), Number(map.second)
+    );
+    return new Date(utcGuess - (tzAsUtc - utcGuess));
+  } catch (e) {
+    return new Date(`${isoDate}T${hhmm}:00`);
+  }
+}
+
 const OmniParser = {
   parseOmniSchedule,
   classifyBranch,
@@ -339,6 +477,8 @@ const OmniParser = {
   pluralizeLessons,
   getBranchColor,
   formatShortDate,
+  getBranchTimeZone,
+  toBranchDate,
   BRANCH_PALETTE
 };
 
