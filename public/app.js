@@ -10,6 +10,17 @@ const state = {
   data: null
 };
 
+// Helper: escape HTML entities to prevent XSS when rendering portal data
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Helper: get local ISO date string "YYYY-MM-DD"
 function getLocalIso(d = new Date()) {
   const y = d.getFullYear();
@@ -422,14 +433,15 @@ function renderSourcesModalList(filterQuery = '') {
   container.innerHTML = branches.map(b => {
     const isChecked = state.tempSelectedBranches.has(b.id);
     const branchColor = getBranchColor(b.id);
+    const safeId = escapeHtml(b.id);
     return `
       <label class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-800/60 theme-item-bg cursor-pointer select-none transition">
         <div class="flex items-center gap-2.5">
-          <input type="checkbox" onchange="toggleTempBranch('${b.id}', this.checked)" ${isChecked ? 'checked' : ''} class="w-4 h-4 rounded bg-[#121c2e] theme-input-bg border-slate-700 theme-border text-blue-600 accent-blue-600 cursor-pointer">
+          <input type="checkbox" onchange="toggleTempBranch('${safeId}', this.checked)" ${isChecked ? 'checked' : ''} class="w-4 h-4 rounded bg-[#121c2e] theme-input-bg border-slate-700 theme-border text-blue-600 accent-blue-600 cursor-pointer">
           <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${branchColor}"></span>
-          <span class="text-xs font-medium text-slate-200 theme-text-primary">${b.name}</span>
+          <span class="text-xs font-medium text-slate-200 theme-text-primary">${escapeHtml(b.name)}</span>
         </div>
-        <span class="text-xs text-slate-400 theme-text-secondary font-mono font-medium">${b.lessonsCount}</span>
+        <span class="text-xs text-slate-400 theme-text-secondary font-mono font-medium">${escapeHtml(b.lessonsCount)}</span>
       </label>
     `;
   }).join('');
@@ -492,10 +504,10 @@ function renderDayRibbon() {
         : (isLight ? 'text-blue-600' : 'text-amber-300');
 
       return `
-        <button onclick="selectDay('${d.id}')" class="flex-1 min-w-[54px] max-w-[84px] flex flex-col items-center justify-between h-[72px] py-1.5 px-0.5 rounded-2xl transition-colors duration-150 relative cursor-pointer ${todayClasses}">
+        <button onclick="selectDay('${escapeHtml(d.id)}')" class="flex-1 min-w-[54px] max-w-[84px] flex flex-col items-center justify-between h-[72px] py-1.5 px-0.5 rounded-2xl transition-colors duration-150 relative cursor-pointer ${todayClasses}">
           <span class="text-3xs font-black uppercase tracking-wider ${todayBadgeColor}">Сегодня</span>
-          <span class="text-xs uppercase font-extrabold ${isSelected ? 'text-white' : (isLight ? 'text-slate-900' : 'text-slate-100')} -mt-0.5">${d.dayName}</span>
-          ${d.date ? `<span class="text-2xs font-mono opacity-80 -mt-1">${d.date}</span>` : ''}
+          <span class="text-xs uppercase font-extrabold ${isSelected ? 'text-white' : (isLight ? 'text-slate-900' : 'text-slate-100')} -mt-0.5">${escapeHtml(d.dayName)}</span>
+          ${d.date ? `<span class="text-2xs font-mono opacity-80 -mt-1">${escapeHtml(d.date)}</span>` : ''}
           <div class="flex items-center gap-1">
             <span class="text-xs font-black">${count}</span>
             <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : (isLight ? 'bg-blue-600' : 'bg-amber-400')}"></span>
@@ -515,9 +527,9 @@ function renderDayRibbon() {
     }
 
     return `
-      <button onclick="selectDay('${d.id}')" class="flex-1 min-w-[42px] max-w-[70px] flex flex-col items-center justify-between h-[58px] py-1.5 px-0.5 rounded-2xl transition-colors duration-150 relative cursor-pointer ${regularClasses}">
-        <span class="text-2xs uppercase font-semibold ${isSelected ? 'text-white' : (isLight ? 'text-slate-600' : 'text-slate-400')}">${d.dayName}</span>
-        ${d.date ? `<span class="text-3xs font-mono opacity-70 -mt-1">${d.date}</span>` : ''}
+      <button onclick="selectDay('${escapeHtml(d.id)}')" class="flex-1 min-w-[42px] max-w-[70px] flex flex-col items-center justify-between h-[58px] py-1.5 px-0.5 rounded-2xl transition-colors duration-150 relative cursor-pointer ${regularClasses}">
+        <span class="text-2xs uppercase font-semibold ${isSelected ? 'text-white' : (isLight ? 'text-slate-600' : 'text-slate-400')}">${escapeHtml(d.dayName)}</span>
+        ${d.date ? `<span class="text-3xs font-mono opacity-70 -mt-1">${escapeHtml(d.date)}</span>` : ''}
         <div class="flex items-center gap-1">
           <span class="text-xs font-bold">${count}</span>
           ${count > 0 ? `<span class="w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}"></span>` : ''}
@@ -581,7 +593,7 @@ function renderLessons() {
     const branchColor = getBranchColor(l.branchId);
 
     return `
-      <div class="${cardClass} relative overflow-hidden" onclick="openLessonModal('${l.id}')">
+      <div class="${cardClass} relative overflow-hidden" onclick="openLessonModal('${escapeHtml(l.id)}')">
         ${liveBadgeHtml}
 
         <!-- Top row: Time & Pair Index -->
@@ -589,32 +601,32 @@ function renderLessons() {
           <div class="flex items-center gap-2">
             <span class="text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-slate-200'} flex items-center gap-1">
               <svg class="w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              ${l.time}
+              ${escapeHtml(l.time)}
             </span>
-            <span class="text-xs-plus ${isLight ? 'text-slate-500' : 'text-slate-500'}">• пара ${l.pairIndex}</span>
+            <span class="text-xs-plus ${isLight ? 'text-slate-500' : 'text-slate-500'}">• пара ${escapeHtml(l.pairIndex)}</span>
           </div>
         </div>
 
         <!-- Discipline Subject (Prominent & bold) -->
         <h3 class="text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'} tracking-tight mb-1">
-          ${l.subject}
+          ${escapeHtml(l.subject)}
         </h3>
 
         <!-- Branch / Location Indicator with stable color dot -->
         <div class="text-xs-plus ${isLight ? 'text-slate-600' : 'text-slate-400'} flex items-center gap-1.5 mb-2.5">
           <span class="w-2 h-2 rounded-full shrink-0" style="background:${branchColor}"></span>
-          <span class="font-medium ${isLight ? 'text-slate-800' : 'text-slate-300'}">${l.branchLocation}</span>
+          <span class="font-medium ${isLight ? 'text-slate-800' : 'text-slate-300'}">${escapeHtml(l.branchLocation)}</span>
         </div>
 
         <!-- Bottom row: Group on Left, Classroom on Right -->
         <div class="flex items-center justify-between text-xs pt-2.5 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'}">
           <span class="font-mono ${isLight ? 'text-slate-800' : 'text-slate-300'} text-xs font-semibold tracking-wide">
-            ${l.group}
+            ${escapeHtml(l.group)}
           </span>
 
           <span class="${isLight ? 'text-slate-700' : 'text-slate-300'} flex items-center gap-1.5 text-xs font-medium">
             <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-            <span class="${isLight ? 'text-amber-600' : 'text-amber-300'} font-semibold">${l.room}</span>
+            <span class="${isLight ? 'text-amber-600' : 'text-amber-300'} font-semibold">${escapeHtml(l.room)}</span>
           </span>
         </div>
       </div>
@@ -645,14 +657,14 @@ function openLessonModal(id) {
       <div>
         <div class="flex items-center gap-2">
           <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-slate-700 theme-border bg-slate-800 theme-item-bg text-slate-300 theme-text-primary">
-            ${found.typeName}
+            ${escapeHtml(found.typeName)}
           </span>
           <span class="text-[11px] text-slate-400 theme-text-secondary font-medium flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full shrink-0" style="background:${branchColor}"></span>
-            <span>${found.branchLocation}</span>
+            <span>${escapeHtml(found.branchLocation)}</span>
           </span>
         </div>
-        <h2 class="text-base font-bold text-white theme-text-primary mt-1.5">${found.subject}</h2>
+        <h2 class="text-base font-bold text-white theme-text-primary mt-1.5">${escapeHtml(found.subject)}</h2>
       </div>
       <button onclick="closeLessonModal()" class="theme-close-btn" title="Закрыть">
         ✕
@@ -662,34 +674,34 @@ function openLessonModal(id) {
     <div class="py-3 space-y-2.5 text-xs">
       <div class="flex items-center justify-between bg-slate-900/60 theme-item-bg p-2.5 rounded-xl border border-slate-800 theme-border">
         <span class="text-slate-400 theme-text-secondary">День и время:</span>
-        <span class="font-mono text-slate-200 theme-text-primary font-semibold">${found.fullDay} ${found.date ? `(${found.date})` : ''} • ${found.time}</span>
+        <span class="font-mono text-slate-200 theme-text-primary font-semibold">${escapeHtml(found.fullDay)} ${found.date ? `(${escapeHtml(found.date)})` : ''} • ${escapeHtml(found.time)}</span>
       </div>
 
       <div class="flex items-center justify-between bg-slate-900/60 theme-item-bg p-2.5 rounded-xl border border-slate-800 theme-border">
         <span class="text-slate-400 theme-text-secondary">Место / Филиал:</span>
         <span class="font-bold text-slate-200 theme-text-primary flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full shrink-0" style="background:${branchColor}"></span>
-          <span>${found.branchLocation}</span>
+          <span>${escapeHtml(found.branchLocation)}</span>
         </span>
       </div>
 
       <div class="flex items-center justify-between bg-slate-900/60 theme-item-bg p-2.5 rounded-xl border border-slate-800 theme-border">
         <span class="text-slate-400 theme-text-secondary">Учебная группа:</span>
-        <span class="font-bold text-slate-200 theme-text-primary font-mono text-sm">${found.group}</span>
+        <span class="font-bold text-slate-200 theme-text-primary font-mono text-sm">${escapeHtml(found.group)}</span>
       </div>
 
       <div class="flex items-center justify-between bg-slate-900/60 theme-item-bg p-2.5 rounded-xl border border-slate-800 theme-border">
         <span class="text-slate-400 theme-text-secondary">Аудитория:</span>
-        <span class="text-amber-500 font-bold">${found.room}</span>
+        <span class="text-amber-500 font-bold">${escapeHtml(found.room)}</span>
       </div>
 
       <div class="flex items-center justify-between bg-slate-900/60 theme-item-bg p-2.5 rounded-xl border border-slate-800 theme-border">
         <span class="text-slate-400 theme-text-secondary">Лента пары:</span>
-        <span class="text-slate-200 theme-text-primary font-semibold">Пара №${found.pairIndex}</span>
+        <span class="text-slate-200 theme-text-primary font-semibold">Пара №${escapeHtml(found.pairIndex)}</span>
       </div>
 
       <div class="pt-2">
-        <button onclick="openOmniJournal('${found.group}')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-blue-600/30">
+        <button onclick="openOmniJournal('${escapeHtml(found.group)}')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-blue-600/30">
           <span>Открыть электронный журнал</span>
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
         </button>
@@ -750,10 +762,10 @@ function openTasksModal() {
       container.innerHTML = sortedStudents.map((s, idx) => `
         <div class="bg-slate-800/80 theme-item-bg p-2 rounded-xl border border-slate-700/60 theme-border flex items-center justify-between text-2xs">
           <div class="truncate mr-2">
-            <div class="font-bold text-slate-100 theme-text-primary truncate">${idx + 1}. ${s.name}</div>
-            <div class="text-[10px] text-slate-400 theme-text-secondary truncate">${s.group} • ${s.subject}</div>
+            <div class="font-bold text-slate-100 theme-text-primary truncate">${idx + 1}. ${escapeHtml(s.name)}</div>
+            <div class="text-[10px] text-slate-400 theme-text-secondary truncate">${escapeHtml(s.group)} • ${escapeHtml(s.subject)}</div>
           </div>
-          <span class="text-[9px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded shrink-0">${s.dueDate ? s.dueDate.split('-').slice(1).reverse().join('.') : 'план'}</span>
+          <span class="text-[9px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded shrink-0">${s.dueDate ? escapeHtml(s.dueDate.split('-').slice(1).reverse().join('.')) : 'план'}</span>
         </div>
       `).join('');
     } else if (listBox) {

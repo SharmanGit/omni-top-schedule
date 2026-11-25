@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { parseOmniSchedule, pluralizeLessons, toBranchDate } = require('./omniParser');
@@ -9,6 +10,13 @@ const { parseOmniSchedule, pluralizeLessons, toBranchDate } = require('./omniPar
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+function debugLog(...args) {
+  if (!IS_PROD) {
+    console.log(...args);
+  }
+}
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -39,6 +47,10 @@ app.use(helmet({
   }
 }));
 app.use(express.json());
+// Serve root omniParser.js as the single source of truth
+app.get('/omniParser.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'omniParser.js'));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Teacher Profile helper: dynamically build profile from username or Omni dashboard
@@ -65,7 +77,7 @@ function buildTeacherProfile(username, idLocalHash, parsedName = null) {
   };
 }
 
-let teacherProfile = buildTeacherProfile(null, null);
+const defaultTeacherProfile = buildTeacherProfile(null, null);
 
 function formatDaysAgo(days) {
   const n = Math.abs(days);
@@ -90,77 +102,84 @@ const teacherTasks = {
   summary: "31 студент в очереди ревью • 2 новых ДЗ на проверку"
 };
 
-// Active live Omni TOP user session
-let activeOmniSession = {
-  cookieStr: null,
-  IdLocalHash: null,
-  username: null,
-  branches: []
-};
+// Per-user isolated session store (keyed by random HttpOnly session cookie)
+const SESSION_COOKIE_NAME = 'omni_sid';
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const sessionsBySid = new Map();
 
-// Multi-week cache file
+// Multi-week cache files
 const WEEKS_FILE = path.join(__dirname, 'data', 'teacher_schedule_weeks.json');
 const ALL_BRANCHES_FILE = path.join(__dirname, 'data', 'teacher_schedule_all_branches.json');
-const SESSION_FILE = path.join(__dirname, 'data', 'omni_session.json');
 
-// Restore active session from disk if present
-function loadPersistedSession() {
-  if (fs.existsSync(SESSION_FILE)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
-      if (data && data.cookieStr && data.IdLocalHash) {
-        activeOmniSession = {
-          ...data,
-          branches: Array.isArray(data.branches) ? data.branches : []
-        };
-        if (data.username) {
-          teacherProfile = buildTeacherProfile(data.username, data.IdLocalHash);
-        }
-        console.log(`[AUTH] Restored active Omni TOP live session for ${data.username} (${activeOmniSession.branches.length} branches)`);
-      }
-    } catch (e) {
-      console.error('[AUTH] Failed to parse session file:', e);
+function getSessionIdFromReq(req) {
+  const cookieHeader = req.headers && req.headers.cookie;
+  if (!cookieHeader) return null;
+  const pairs = cookieHeader.split(';');
+  for (const p of pairs) {
+    const idx = p.indexOf('=');
+    if (idx !== -1 && p.slice(0, idx).trim() === SESSION_COOKIE_NAME) {
+      return decodeURIComponent(p.slice(idx + 1).trim());
     }
   }
+  return null;
 }
 
-function saveSession(session) {
-  try {
-    fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2), 'utf8');
-    console.log(`[AUTH] Session saved to disk for ${session.username}`);
-  } catch (e) {
-    console.error('[AUTH] Failed to save session:', e);
+function getRequestSession(req) {
+  const sid = getSessionIdFromReq(req);
+  if (!sid) return null;
+  const session = sessionsBySid.get(sid);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    sessionsBySid.delete(sid);
+    return null;
   }
+  return session;
 }
 
-function clearSession() {
-  activeOmniSession = { cookieStr: null, IdLocalHash: null, username: null, branches: [] };
-  teacherProfile = buildTeacherProfile(null, null);
-  if (fs.existsSync(SESSION_FILE)) {
-    try {
-      fs.unlinkSync(SESSION_FILE);
-      console.log(`[AUTH] Session cleared from disk`);
-    } catch (e) {}
+function createUserSession(sessionData, res, req) {
+  const sid = crypto.randomBytes(24).toString('hex');
+  sessionsBySid.set(sid, {
+    ...sessionData,
+    expiresAt: Date.now() + SESSION_TTL_MS
+  });
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const cookieFlags = [
+    `${SESSION_COOKIE_NAME}=${sid}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/',
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`
+  ];
+  if (isHttps) cookieFlags.push('Secure');
+  res.setHeader('Set-Cookie', cookieFlags.join('; '));
+  debugLog(`[AUTH] Created isolated session (${sid.slice(0, 8)}...)`);
+  return sid;
+}
+
+function deleteUserSession(req, res) {
+  const sid = getSessionIdFromReq(req);
+  if (sid) {
+    sessionsBySid.delete(sid);
+    debugLog(`[AUTH] Cleared session (${sid.slice(0, 8)}...)`);
   }
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
-loadPersistedSession();
-
-// Fetch LIVE schedule from Omni TOP using active session cookies across all branches
-async function fetchLiveOmniSchedule(weekOffset = 0) {
-  if (!activeOmniSession.cookieStr || !activeOmniSession.IdLocalHash) {
+// Fetch LIVE schedule from Omni TOP using session cookies across all branches
+async function fetchLiveOmniSchedule(session, weekOffset = 0) {
+  if (!session || !session.cookieStr || !session.IdLocalHash) {
     return null;
   }
 
-  const branchesToFetch = (activeOmniSession.branches && activeOmniSession.branches.length > 0)
-    ? activeOmniSession.branches
-    : [{ cityId: '95', cityName: 'Барнаул', cookieStr: activeOmniSession.cookieStr, IdLocalHash: activeOmniSession.IdLocalHash }];
+  const branchesToFetch = (session.branches && session.branches.length > 0)
+    ? session.branches
+    : [{ cityId: '95', cityName: 'Барнаул', cookieStr: session.cookieStr, IdLocalHash: session.IdLocalHash }];
 
   const branchPayloads = [];
 
   for (const b of branchesToFetch) {
     try {
-      console.log(`[LIVE OMNI] Fetching live schedule for ${b.cityName} (${b.cityId}), week ${weekOffset}...`);
+      debugLog(`[LIVE OMNI] Fetching live schedule for ${b.cityName} (${b.cityId}), week ${weekOffset}...`);
       const res = await fetch('https://omni.top-academy.ru/schedule/get-schedule', {
         method: 'POST',
         headers: {
@@ -226,14 +245,14 @@ async function fetchLiveOmniSchedule(weekOffset = 0) {
 }
 
 // Fetch LIVE tasks (homeworks & student reviews) from Omni TOP across all branches
-async function fetchLiveOmniTasks() {
-  if (!activeOmniSession.cookieStr || !activeOmniSession.IdLocalHash) {
+async function fetchLiveOmniTasks(session) {
+  if (!session || !session.cookieStr || !session.IdLocalHash) {
     return null;
   }
 
-  const branchesToFetch = (activeOmniSession.branches && activeOmniSession.branches.length > 0)
-    ? activeOmniSession.branches
-    : [{ cityId: '95', cityName: 'Барнаул', cookieStr: activeOmniSession.cookieStr, IdLocalHash: activeOmniSession.IdLocalHash }];
+  const branchesToFetch = (session.branches && session.branches.length > 0)
+    ? session.branches
+    : [{ cityId: '95', cityName: 'Барнаул', cookieStr: session.cookieStr, IdLocalHash: session.IdLocalHash }];
 
   let totalHw = 0;
   let totalReviews = 0;
@@ -246,7 +265,7 @@ async function fetchLiveOmniTasks() {
 
   for (const b of branchesToFetch) {
     try {
-      console.log(`[LIVE OMNI] Fetching live tasks for ${b.cityName} (${b.cityId})...`);
+      debugLog(`[LIVE OMNI] Fetching live tasks for ${b.cityName} (${b.cityId})...`);
       const res = await fetch('https://omni.top-academy.ru/tasks/not-done-tasks', {
         method: 'POST',
         headers: {
@@ -308,21 +327,27 @@ async function fetchLiveOmniTasks() {
 
   if (anySuccess) {
     if (minDeadlineHours === 999) minDeadlineHours = 26;
-    if (maxFactDays === 0) maxFactDays = 3;
-    let reviewDaysAgo = 6;
+    let reviewDaysAgo = 0;
     if (earliestVisitDate) {
       const d1 = new Date(earliestVisitDate + 'T00:00:00');
       const d2 = new Date();
       reviewDaysAgo = Math.max(0, Math.floor((d2 - d1) / (24 * 3600 * 1000)));
     }
-    console.log(`[LIVE OMNI] Live tasks: ${totalHw} HW (oldest: ${maxFactDays}d), ${totalReviews} reviews (oldest: ${reviewDaysAgo}d), ${mergedStudents.length} students`);
+    const earliestDue = mergedStudents.map(s => s.dueDate).filter(Boolean).sort()[0];
+    const dueLabel = earliestDue ? ` • план до ${earliestDue.split('-').slice(1).reverse().join('.')}` : '';
+
+    debugLog(`[LIVE OMNI] Live tasks: ${totalHw} HW (oldest: ${maxFactDays}d), ${totalReviews} reviews (oldest: ${reviewDaysAgo}d), ${mergedStudents.length} students`);
     return {
       pendingReviewsCount: totalReviews,
       newHomeworkToCheck: totalHw,
       hwWaitDays: maxFactDays,
-      hwWaitText: `Самое старое сдано: ${formatDaysAgo(maxFactDays)} назад`,
+      hwWaitText: totalHw > 0
+        ? (maxFactDays > 0 ? `Самое старое сдано: ${formatDaysAgo(maxFactDays)} назад` : 'Сдано недавно')
+        : 'Новых ДЗ нет',
       reviewWaitDays: reviewDaysAgo,
-      reviewWaitText: `Ожидает: ${formatDaysAgo(reviewDaysAgo)} • план до 07.11`,
+      reviewWaitText: totalReviews > 0
+        ? `Ожидает: ${formatDaysAgo(reviewDaysAgo)}${dueLabel}`
+        : 'Отзывов в очереди нет',
       deadlineHours: minDeadlineHours,
       deadlineText: `${minDeadlineHours} ч`,
       studentsList: mergedStudents,
@@ -418,11 +443,13 @@ function computeLessonState(lesson, dayIsoDate, now) {
  * Full week schedule for the teacher across all branches
  */
 app.get('/api/teacher/schedule', async (req, res) => {
+  const session = getRequestSession(req);
+  const profile = (session && session.teacherProfile) || defaultTeacherProfile;
   const weekOffset = parseInt(req.query.week || '0', 10);
   const filterBranch = req.query.branch;
 
   // Try live Omni TOP schedule if logged in
-  let scheduleData = await fetchLiveOmniSchedule(weekOffset);
+  let scheduleData = await fetchLiveOmniSchedule(session, weekOffset);
   const isLive = !!scheduleData;
 
   // Fallback to local snapshot
@@ -498,25 +525,30 @@ app.get('/api/teacher/schedule', async (req, res) => {
 
   // Live Tasks from Omni TOP
   let currentTasks = { ...teacherTasks };
-  if (activeOmniSession.cookieStr && activeOmniSession.IdLocalHash) {
-    const liveTasks = await fetchLiveOmniTasks();
+  if (session && session.cookieStr && session.IdLocalHash) {
+    const liveTasks = await fetchLiveOmniTasks(session);
     if (liveTasks) {
       currentTasks = { ...teacherTasks, ...liveTasks, isLive: true };
     }
   }
 
   const deadlineHours = currentTasks.deadlineHours || 26;
-  if (!global.cachedDeadlineTarget || global.lastDeadlineHours !== deadlineHours) {
-    global.lastDeadlineHours = deadlineHours;
-    global.cachedDeadlineTarget = Date.now() + deadlineHours * 3600 * 1000;
+  let deadlineTargetTimestamp;
+  if (session) {
+    if (!session.cachedDeadlineTarget || session.lastDeadlineHours !== deadlineHours) {
+      session.lastDeadlineHours = deadlineHours;
+      session.cachedDeadlineTarget = Date.now() + deadlineHours * 3600 * 1000;
+    }
+    deadlineTargetTimestamp = session.cachedDeadlineTarget;
+  } else {
+    deadlineTargetTimestamp = Date.now() + deadlineHours * 3600 * 1000;
   }
-  const deadlineTargetTimestamp = global.cachedDeadlineTarget;
 
   res.json({
-    teacher: teacherProfile,
+    teacher: profile,
     system: "Omni TOP",
     isLive: isLive,
-    liveUser: activeOmniSession.username || null,
+    liveUser: (session && session.username) || null,
     todayIso: todayIso,
     weekOffset: weekOffset,
     week: scheduleData.week,
@@ -537,10 +569,12 @@ app.get('/api/teacher/schedule', async (req, res) => {
  * 2. GET /api/teacher/tasks
  */
 app.get('/api/teacher/tasks', async (req, res) => {
-  const liveTasks = await fetchLiveOmniTasks();
+  const session = getRequestSession(req);
+  const profile = (session && session.teacherProfile) || defaultTeacherProfile;
+  const liveTasks = await fetchLiveOmniTasks(session);
   const tasks = liveTasks ? { ...teacherTasks, ...liveTasks, isLive: true } : { ...teacherTasks, isLive: false };
   res.json({
-    teacher: teacherProfile,
+    teacher: profile,
     teacherTasks: tasks,
     reviewsPending: tasks.pendingReviewsCount,
     newHomeworks: tasks.newHomeworkToCheck,
@@ -731,24 +765,24 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Введите логин и пароль' });
   }
 
-  console.log(`[AUTH] Attempting login for user: ${username}...`);
+  debugLog('[AUTH] Attempting login...');
   // 1. Primary login handshake
   const authMain = await authenticateOmniUser(username, password);
 
   if (authMain.success) {
-    console.log(`[AUTH] Login SUCCESS for ${username}! Dynamically discovering user branches from Omni TOP...`);
+    debugLog('[AUTH] Login SUCCESS, discovering user branches...');
     
     // 2. Dynamically extract all available branches for this teacher from #cityes menu
     let { branches: discovered, teacherName } = await discoverUserBranchesAndProfile(authMain.cookieStr, authMain.IdLocalHash);
     if (!discovered || discovered.length === 0) {
-      console.log('[AUTH] No branches menu found in HTML, falling back to known user branches');
+      debugLog('[AUTH] No branches menu found in HTML, falling back to known user branches');
       discovered = [
         { cityId: '95', cityName: 'Барнаул' },
         { cityId: '430', cityName: 'Барнаул Колледж' },
         { cityId: '607', cityName: 'Барнаул Школа' }
       ];
     } else {
-      console.log(`[AUTH] Discovered ${discovered.length} branches:`, discovered.map(b => `${b.cityName} (${b.cityId})`).join(', '));
+      debugLog(`[AUTH] Discovered ${discovered.length} branches`);
     }
 
     // 3. For each branch, switch context to obtain signed city_id cookie
@@ -763,22 +797,22 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       });
     }
 
-    activeOmniSession = {
+    const userProfile = buildTeacherProfile(username, authMain.IdLocalHash, teacherName);
+    createUserSession({
       cookieStr: authMain.cookieStr,
       IdLocalHash: authMain.IdLocalHash,
       username: username,
-      branches: branchSessions
-    };
-    teacherProfile = buildTeacherProfile(username, authMain.IdLocalHash, teacherName);
-    saveSession(activeOmniSession);
+      branches: branchSessions,
+      teacherProfile: userProfile
+    }, res, req);
 
     return res.json({
       success: true,
-      teacher: teacherProfile,
+      teacher: userProfile,
       message: 'Успешная авторизация в Omni TOP'
     });
   } else {
-    console.log(`[AUTH] Login FAILED for ${username}: ${authMain.error}`);
+    debugLog(`[AUTH] Login FAILED: ${authMain.error}`);
     return res.status(401).json({
       success: false,
       error: authMain.error
@@ -790,10 +824,11 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
  * 4. GET /api/auth/status
  */
 app.get('/api/auth/status', (req, res) => {
+  const session = getRequestSession(req);
   res.json({
-    isAuthenticated: !!activeOmniSession.cookieStr,
-    isLive: !!activeOmniSession.cookieStr,
-    username: activeOmniSession.username || null
+    isAuthenticated: !!(session && session.cookieStr),
+    isLive: !!(session && session.cookieStr),
+    username: (session && session.username) || null
   });
 });
 
@@ -801,7 +836,7 @@ app.get('/api/auth/status', (req, res) => {
  * 5. POST /api/auth/logout
  */
 app.post('/api/auth/logout', (req, res) => {
-  clearSession();
+  deleteUserSession(req, res);
   res.json({ success: true, message: 'Сессия сброшена' });
 });
 

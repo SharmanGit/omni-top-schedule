@@ -45,10 +45,10 @@ const OmniClient = (() => {
     return fetch(options.url, fetchOptions);
   }
 
-  // Session persistence
+  // Session persistence (prefer sessionStorage over persistent localStorage for sensitive cookies)
   function getSession() {
     try {
-      const raw = localStorage.getItem(SESSION_KEY);
+      const raw = sessionStorage.getItem(SESSION_KEY);
       if (raw) return JSON.parse(raw);
     } catch (e) {}
     return { cookieStr: null, IdLocalHash: null, username: null, branches: [] };
@@ -56,7 +56,8 @@ const OmniClient = (() => {
 
   function saveSession(session) {
     try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      localStorage.removeItem(SESSION_KEY); // Clean up any legacy plaintext localStorage entry
       localStorage.setItem('omni_auth', 'true');
       if (session.username) localStorage.setItem('omni_user', session.username);
     } catch (e) {}
@@ -64,6 +65,7 @@ const OmniClient = (() => {
 
   function clearSession() {
     try {
+      sessionStorage.removeItem(SESSION_KEY);
       localStorage.removeItem(SESSION_KEY);
       localStorage.setItem('omni_auth', 'false');
     } catch (e) {}
@@ -428,13 +430,17 @@ const OmniClient = (() => {
     // Tasks
     const tasks = await getTasks();
 
+    const displayName = (session.teacherName && session.teacherName.trim()) ||
+      (session.username ? session.username.split('@')[0].replace(/[._]/g, ' ') : 'Преподаватель');
+    const nameParts = displayName.trim().split(/\s+/);
+
     return {
       teacher: {
-        id: 226,
-        firstName: "Андрей",
-        lastName: "Винокуров",
-        name: "Андрей Винокуров",
-        email: session.username || "teacher@top-academy.ru"
+        id: session.IdLocalHash || 0,
+        firstName: nameParts[0] || displayName,
+        lastName: nameParts.slice(1).join(' ') || '',
+        name: displayName,
+        email: session.username || ""
       },
       todayIso,
       weekOffset,
@@ -518,8 +524,7 @@ const OmniClient = (() => {
       }
 
       if (anySuccess) {
-        if (maxFactDays === 0) maxFactDays = 3;
-        let reviewDaysAgo = 6;
+        let reviewDaysAgo = 0;
         if (earliestVisitDate) {
           const d1 = new Date(earliestVisitDate + 'T00:00:00');
           const d2 = new Date();
@@ -532,13 +537,20 @@ const OmniClient = (() => {
           return (a.name || '').localeCompare(b.name || '');
         });
 
+        const earliestDue = mergedStudents.map(s => s.dueDate).filter(Boolean).sort()[0];
+        const dueLabel = earliestDue ? ` • план до ${earliestDue.split('-').slice(1).reverse().join('.')}` : '';
+
         return {
           pendingReviewsCount: totalReviews,
           newHomeworkToCheck: totalHw,
           hwWaitDays: maxFactDays,
-          hwWaitText: `Самое старое сдано: ${formatDaysAgo(maxFactDays)} назад`,
+          hwWaitText: totalHw > 0
+            ? (maxFactDays > 0 ? `Самое старое сдано: ${formatDaysAgo(maxFactDays)} назад` : 'Сдано недавно')
+            : 'Новых ДЗ нет',
           reviewWaitDays: reviewDaysAgo,
-          reviewWaitText: `Ожидает: ${formatDaysAgo(reviewDaysAgo)} • план до 07.11`,
+          reviewWaitText: totalReviews > 0
+            ? `Ожидает: ${formatDaysAgo(reviewDaysAgo)}${dueLabel}`
+            : 'Отзывов в очереди нет',
           studentsList: mergedStudents,
           isLive: true
         };

@@ -201,8 +201,8 @@ const MONTH_NAMES = [
 // Helper: format DD.MM
 function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
-// Reference base Monday: 2026-10-26 (Week 9 in original screenshot: 26.10–01.11)
-const BASE_MONDAY = new Date(2026, 9, 26); // Month 9 is October in JS Date
+// Reference base Monday: 2026-10-26 (Week 9 in original screenshot: 26.10–01.11) in UTC
+const BASE_MONDAY = new Date(Date.UTC(2026, 9, 26)); // Month 9 is October in JS Date
 
 class SyntheticGenerator {
   constructor() {
@@ -227,19 +227,19 @@ class SyntheticGenerator {
     }
 
     const weekNumber = 9 + weekOffset;
-    const mondayDate = new Date(BASE_MONDAY);
-    mondayDate.setDate(BASE_MONDAY.getDate() + weekOffset * 7);
+    const mondayDate = new Date(BASE_MONDAY.getTime());
+    mondayDate.setUTCDate(BASE_MONDAY.getUTCDate() + weekOffset * 7);
 
-    const sundayDate = new Date(mondayDate);
-    sundayDate.setDate(mondayDate.getDate() + 6);
+    const sundayDate = new Date(mondayDate.getTime());
+    sundayDate.setUTCDate(mondayDate.getUTCDate() + 6);
 
-    const weekLabel = `${pad2(mondayDate.getDate())}.${pad2(mondayDate.getMonth() + 1)}–${pad2(sundayDate.getDate())}.${pad2(sundayDate.getMonth() + 1)}`;
+    const weekLabel = `${pad2(mondayDate.getUTCDate())}.${pad2(mondayDate.getUTCMonth() + 1)}–${pad2(sundayDate.getUTCDate())}.${pad2(sundayDate.getUTCMonth() + 1)}`;
 
     const days = WEEKLY_TEMPLATE.map((tmpl, idx) => {
-      const curDate = new Date(mondayDate);
-      curDate.setDate(mondayDate.getDate() + idx);
-      const dayDateStr = `${pad2(curDate.getDate())}.${pad2(curDate.getMonth() + 1)}`;
-      const fullDateStr = `${DAY_FULL_NAMES[idx]}, ${curDate.getDate()} ${MONTH_NAMES[curDate.getMonth()]}`;
+      const curDate = new Date(mondayDate.getTime());
+      curDate.setUTCDate(mondayDate.getUTCDate() + idx);
+      const dayDateStr = `${pad2(curDate.getUTCDate())}.${pad2(curDate.getUTCMonth() + 1)}`;
+      const fullDateStr = `${DAY_FULL_NAMES[idx]}, ${curDate.getUTCDate()} ${MONTH_NAMES[curDate.getUTCMonth()]}`;
 
       const lessons = tmpl.slots.map((slot, sIdx) => {
         const discList = CURRICULUM[slot.category];

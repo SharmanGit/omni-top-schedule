@@ -1,4 +1,4 @@
-package ru.topacademy.omni.data.repository
+﻿package ru.topacademy.omni.data.repository
 
 import android.content.Context
 import com.google.gson.Gson
@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import ru.topacademy.omni.BuildConfig
 import ru.topacademy.omni.data.db.BranchEntity
 import ru.topacademy.omni.data.db.LessonEntity
 import ru.topacademy.omni.data.db.OmniDatabase
@@ -34,6 +35,13 @@ class OmniRepository(private val context: Context) {
     private val sessionManager = OmniSessionManager(context)
     private val gson = Gson()
     private val isoFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+    private object RepoLog {
+        fun d(tag: String, msg: String) { if (BuildConfig.DEBUG) android.util.Log.d(tag, msg) }
+        fun i(tag: String, msg: String) { if (BuildConfig.DEBUG) android.util.Log.i(tag, msg) }
+        fun w(tag: String, msg: String) { if (BuildConfig.DEBUG) android.util.Log.w(tag, msg) }
+        fun e(tag: String, msg: String) { if (BuildConfig.DEBUG) android.util.Log.e(tag, msg) }
+    }
 
     fun isLoggedIn(): Boolean = sessionManager.isLoggedIn()
 
@@ -84,7 +92,7 @@ class OmniRepository(private val context: Context) {
     suspend fun relogin(): Result<UserSession> = reloginMutex.withLock {
         val creds = sessionManager.getCredentials()
             ?: return@withLock Result.failure(Exception("Нет сохраненных учетных данных"))
-        android.util.Log.d("OmniRepo", "Starting implicit relogin for ${creds.first}...")
+        RepoLog.d("OmniRepo", "Starting implicit relogin for ${creds.first}...")
         val res = apiClient.login(creds.first, creds.second)
         if (res.isSuccess) {
             val session = res.getOrThrow()
@@ -96,10 +104,10 @@ class OmniRepository(private val context: Context) {
                 email = session.username
             )
             db.profileDao().insertProfile(profileEntity)
-            android.util.Log.i("OmniRepo", "Implicit relogin succeeded for ${session.teacherName}!")
+            RepoLog.i("OmniRepo", "Implicit relogin succeeded for ${session.teacherName}!")
             Result.success(session)
         } else {
-            android.util.Log.e("OmniRepo", "Implicit relogin failed: ${res.exceptionOrNull()?.message}")
+            RepoLog.e("OmniRepo", "Implicit relogin failed: ${res.exceptionOrNull()?.message}")
             Result.failure(res.exceptionOrNull() ?: Exception("Не удалось обновить сессию"))
         }
     }
@@ -115,7 +123,7 @@ class OmniRepository(private val context: Context) {
             return@withLock Result.success(session)
         }
 
-        android.util.Log.i("OmniRepo", "Switching active city from $currentCity to $targetCityId...")
+        RepoLog.i("OmniRepo", "Switching active city from $currentCity to $targetCityId...")
         var res = apiClient.switchCity(session.cookieStr, session.idLocalHash, targetCityId)
         if (res.isFailure && res.exceptionOrNull() is OmniApiClient.SessionExpiredException) {
             val refreshed = relogin().getOrNull()
@@ -131,7 +139,7 @@ class OmniRepository(private val context: Context) {
             sessionManager.saveSession(updated)
             Result.success(updated)
         } else {
-            android.util.Log.w("OmniRepo", "Failed to switch city to $targetCityId: ${res.exceptionOrNull()?.message}")
+            RepoLog.w("OmniRepo", "Failed to switch city to $targetCityId: ${res.exceptionOrNull()?.message}")
             Result.success(session)
         }
     }
@@ -186,7 +194,7 @@ class OmniRepository(private val context: Context) {
             listOf(ru.topacademy.omni.data.network.BranchSession(cityId = "95", cityName = "Барнаул", cookieStr = currentSession.cookieStr, idLocalHash = currentSession.idLocalHash))
         }
 
-        android.util.Log.d("OmniRepo", "syncWeekSchedule for week=$weekOffset across ${branchesToQuery.size} branches")
+        RepoLog.d("OmniRepo", "syncWeekSchedule for week=$weekOffset across ${branchesToQuery.size} branches")
 
         var hasRelogged = false
         // Fetch schedule for all branches associated with teacher
@@ -207,7 +215,7 @@ class OmniRepository(private val context: Context) {
             )
 
             if (schedRes.isFailure && schedRes.exceptionOrNull() is OmniApiClient.SessionExpiredException && !hasRelogged) {
-                android.util.Log.w("OmniRepo", "Session expired during fetchSchedule. Triggering implicit relogin...")
+                RepoLog.w("OmniRepo", "Session expired during fetchSchedule. Triggering implicit relogin...")
                 val refreshed = relogin().getOrNull()
                 if (refreshed != null) {
                     hasRelogged = true
@@ -224,14 +232,14 @@ class OmniRepository(private val context: Context) {
             if (schedRes.isSuccess) {
                 val raw = schedRes.getOrThrow()
                 val parsed = OmniScheduleParser.parseSchedule(raw, branch, weekOffset)
-                android.util.Log.d("OmniRepo", "Branch ${branch.cityName} returned ${parsed.size} lessons (raw length=${raw.length})")
+                RepoLog.d("OmniRepo", "Branch ${branch.cityName} returned ${parsed.size} lessons (raw length=${raw.length})")
                 aggregatedLessons.addAll(parsed)
             } else {
-                android.util.Log.e("OmniRepo", "Branch ${branch.cityName} failed: ${schedRes.exceptionOrNull()?.message}")
+                RepoLog.e("OmniRepo", "Branch ${branch.cityName} failed: ${schedRes.exceptionOrNull()?.message}")
             }
         }
 
-        android.util.Log.d("OmniRepo", "Total aggregated lessons: ${aggregatedLessons.size}")
+        RepoLog.d("OmniRepo", "Total aggregated lessons: ${aggregatedLessons.size}")
 
         // Cache into Room: preserve attendance marks for current teacher's lessons if already known
         val existingLessons = try {
@@ -261,7 +269,7 @@ class OmniRepository(private val context: Context) {
         if (entities.isNotEmpty()) {
             db.lessonDao().insertLessons(entities)
         }
-        android.util.Log.d("OmniRepo", "Saved ${entities.size} lessons to Room for $startDate..$endDate (preserved ${existingMarkedKeys.size} marked)")
+        RepoLog.d("OmniRepo", "Saved ${entities.size} lessons to Room for $startDate..$endDate (preserved ${existingMarkedKeys.size} marked)")
 
         // Refresh widgets
         try {
@@ -320,7 +328,7 @@ class OmniRepository(private val context: Context) {
             var tasksRes = apiClient.fetchTasks(activeSession.cookieStr, activeSession.idLocalHash)
 
             if (tasksRes.isFailure && tasksRes.exceptionOrNull() is OmniApiClient.SessionExpiredException && !hasRelogged) {
-                android.util.Log.w("OmniRepo", "Session expired during fetchTasks. Triggering implicit relogin...")
+                RepoLog.w("OmniRepo", "Session expired during fetchTasks. Triggering implicit relogin...")
                 val refreshed = relogin().getOrNull()
                 if (refreshed != null) {
                     hasRelogged = true
@@ -338,7 +346,7 @@ class OmniRepository(private val context: Context) {
                 if (parsed.oldestHwWaitHours > maxHwHours) maxHwHours = parsed.oldestHwWaitHours
                 if (parsed.oldestReviewWaitDays > maxReviewDays) maxReviewDays = parsed.oldestReviewWaitDays
                 for (s in parsed.reviewStudents) {
-                    if (seenStudentNames.add("${s.name}_${s.group}")) {
+                    if (seenStudentNames.add("${s.name}_${s.group}_${s.subject}")) {
                         allStudents.add(s)
                     }
                 }
@@ -355,7 +363,7 @@ class OmniRepository(private val context: Context) {
             rawStudentsJson = gson.toJson(allStudents)
         )
         db.taskDao().insertTaskQueue(entity)
-        android.util.Log.d("OmniRepo", "Synced tasks across branches: $totalHw HW, $totalReviews reviews, ${allStudents.size} students")
+        RepoLog.d("OmniRepo", "Synced tasks across branches: $totalHw HW, $totalReviews reviews, ${allStudents.size} students")
         return Result.success(Unit)
     }
 
@@ -374,7 +382,7 @@ class OmniRepository(private val context: Context) {
         var activeSession = sessionResult.getOrNull() ?: sessionManager.getSession() ?: relogin().getOrNull()
             ?: return lesson.isAttendanceMarked
 
-        android.util.Log.i("OmniRepo", "Checking attendance for ${lesson.date} lenta=${lesson.lentaNum} group=${lesson.group} branch=${lesson.branchName} (city=$targetCity)")
+        RepoLog.i("OmniRepo", "Checking attendance for ${lesson.date} lenta=${lesson.lentaNum} group=${lesson.group} branch=${lesson.branchName} (city=$targetCity)")
 
         var res = apiClient.fetchPresents(
             cookieStr = activeSession.cookieStr,
@@ -402,15 +410,15 @@ class OmniRepository(private val context: Context) {
             val raw = res.getOrThrow()
             val parsedResult = OmniScheduleParser.parseAttendanceStatus(raw)
             if (parsedResult != null) {
-                android.util.Log.i("OmniRepo", "Lesson ${lesson.id} marked: $parsedResult (raw length=${raw.length})")
+                RepoLog.i("OmniRepo", "Lesson ${lesson.id} marked: $parsedResult (raw length=${raw.length})")
                 db.lessonDao().updateAttendanceStatus(lesson.id, parsedResult)
                 return parsedResult
             } else {
-                android.util.Log.d("OmniRepo", "Lesson ${lesson.id} inconclusive attendance response, retaining ${lesson.isAttendanceMarked}")
+                RepoLog.d("OmniRepo", "Lesson ${lesson.id} inconclusive attendance response, retaining ${lesson.isAttendanceMarked}")
                 return lesson.isAttendanceMarked
             }
         } else {
-            android.util.Log.w("OmniRepo", "fetchPresents failed for ${lesson.id}: ${res.exceptionOrNull()?.message}")
+            RepoLog.w("OmniRepo", "fetchPresents failed for ${lesson.id}: ${res.exceptionOrNull()?.message}")
         }
         return lesson.isAttendanceMarked
     }
@@ -427,7 +435,7 @@ class OmniRepository(private val context: Context) {
         val lessons = db.lessonDao().getLessonsForDateSync(targetDate)
         val nowInstant = java.time.Instant.now()
 
-        android.util.Log.i("OmniRepo", "syncAttendanceForDay: checking ${lessons.size} lessons on $targetDate (day=$dayOfWeek)")
+        RepoLog.i("OmniRepo", "syncAttendanceForDay: checking ${lessons.size} lessons on $targetDate (day=$dayOfWeek)")
 
         for (lEntity in lessons) {
             val lesson = lEntity.toDomain()

@@ -3,8 +3,8 @@
   "appName": "Omni TOP",
   "webDir": "public",
   "server": {
-    "androidScheme": "http",
-    "cleartext": true
+    "androidScheme": "https",
+    "cleartext": false
   },
   "backgroundColor": "#0c1322",
   "plugins": {
