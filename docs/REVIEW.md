@@ -176,6 +176,7 @@ proguard, CI-workflow, web-MVP (server.js, public/, capacitor.config.json); св
 | F10 | `server.js`, `OmniRepository.kt`, `android/app/build.gradle` | Gated verbose/PII logs behind `NODE_ENV !== 'production'` (`debugLog`) and `BuildConfig.DEBUG` (`RepoLog`) | Fixed |
 | F11 | `package.json`, `server.js` | Served root `omniParser.js` directly in Express and added `sync:parser` / `prestart` scripts to keep `public/omniParser.js` in sync | Fixed |
 | F12 | `OmniSessionManager.kt`, `.github/workflows/build.yml`, `android/app/build.gradle` | Refused plaintext password persistence when Keystore fallback triggers; added GitHub Secrets release-signing step and v2/v3 signing flags | Fixed |
+| F13 | `data/calendar/*`, `OmniRepository.kt`, `MainViewModel.kt`, `ProfileBottomSheet.kt`, `AndroidManifest.xml` | Added `CalendarSyncProvider` abstraction + `DeviceCalendarProvider` (`CalendarContract`) with per-branch timezone support, background sync, logout cleanup, and UI selector | Fixed |
 
 ### Open tasks (out of scope for this PR)
 

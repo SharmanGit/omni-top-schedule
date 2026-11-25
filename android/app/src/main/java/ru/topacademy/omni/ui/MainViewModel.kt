@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import ru.topacademy.omni.data.calendar.DeviceCalendar
 import ru.topacademy.omni.data.parser.OmniScheduleParser
 import ru.topacademy.omni.data.repository.OmniRepository
 import ru.topacademy.omni.domain.model.Branch
@@ -36,7 +37,13 @@ data class MainUiState(
     val selectedLessonDetails: Lesson? = null,
     val isTasksSheetOpen: Boolean = false,
     val isSourcesModalOpen: Boolean = false,
-    val isProfileModalOpen: Boolean = false
+    val isProfileModalOpen: Boolean = false,
+    val calendarSyncEnabled: Boolean = false,
+    val selectedCalendarId: Long = -1L,
+    val availableCalendars: List<DeviceCalendar> = emptyList(),
+    val calendarSyncedCount: Int = 0,
+    val isCalendarSyncing: Boolean = false,
+    val calendarError: String? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -148,6 +155,96 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openProfileModal() {
         _uiState.update { it.copy(isProfileModalOpen = true) }
+        refreshCalendarState()
+    }
+
+    fun refreshCalendarState() {
+        viewModelScope.launch {
+            val mgr = repository.calendarSyncManager
+            val enabled = mgr.isEnabled()
+            val calendars = mgr.getAvailableCalendars()
+            val selectedId = if (enabled && mgr.hasCalendarPermission()) {
+                mgr.ensureSelectedCalendar() ?: mgr.getSelectedCalendarId()
+            } else {
+                mgr.getSelectedCalendarId()
+            }
+            _uiState.update {
+                it.copy(
+                    calendarSyncEnabled = enabled,
+                    availableCalendars = calendars,
+                    selectedCalendarId = selectedId,
+                    calendarSyncedCount = mgr.getLastSyncedCount(),
+                    calendarError = null
+                )
+            }
+        }
+    }
+
+    fun setCalendarSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val mgr = repository.calendarSyncManager
+            mgr.setEnabled(enabled)
+            if (enabled) {
+                _uiState.update { it.copy(calendarSyncEnabled = true, isCalendarSyncing = true, calendarError = null) }
+                val calendars = mgr.getAvailableCalendars()
+                val selectedId = mgr.ensureSelectedCalendar() ?: -1L
+                // Also ensure next week is fetched so 2 weeks are synced to calendar
+                repository.syncWeekSchedule(1, fetchAttendance = false)
+                val res = repository.syncCalendarNow()
+                _uiState.update {
+                    it.copy(
+                        availableCalendars = calendars,
+                        selectedCalendarId = selectedId,
+                        isCalendarSyncing = false,
+                        calendarSyncedCount = res.getOrDefault(mgr.getLastSyncedCount()),
+                        calendarError = res.exceptionOrNull()?.localizedMessage
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(calendarSyncEnabled = false, isCalendarSyncing = true, calendarError = null) }
+                repository.clearCalendar()
+                _uiState.update {
+                    it.copy(
+                        isCalendarSyncing = false,
+                        calendarSyncedCount = 0
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectCalendar(calendarId: Long) {
+        viewModelScope.launch {
+            val mgr = repository.calendarSyncManager
+            val prevId = mgr.getSelectedCalendarId()
+            if (prevId != calendarId) {
+                repository.clearCalendar()
+                mgr.setSelectedCalendarId(calendarId)
+                _uiState.update { it.copy(selectedCalendarId = calendarId, isCalendarSyncing = true, calendarError = null) }
+                val res = repository.syncCalendarNow()
+                _uiState.update {
+                    it.copy(
+                        isCalendarSyncing = false,
+                        calendarSyncedCount = res.getOrDefault(mgr.getLastSyncedCount()),
+                        calendarError = res.exceptionOrNull()?.localizedMessage
+                    )
+                }
+            }
+        }
+    }
+
+    fun syncCalendarNow() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCalendarSyncing = true, calendarError = null) }
+            val res = repository.syncCalendarNow()
+            _uiState.update {
+                it.copy(
+                    isCalendarSyncing = false,
+                    calendarSyncedCount = res.getOrDefault(repository.calendarSyncManager.getLastSyncedCount()),
+                    calendarError = res.exceptionOrNull()?.localizedMessage
+                )
+            }
+        }
     }
 
     fun closeProfileModal() {

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import ru.topacademy.omni.BuildConfig
+import ru.topacademy.omni.data.calendar.CalendarSyncManager
 import ru.topacademy.omni.data.db.BranchEntity
 import ru.topacademy.omni.data.db.LessonEntity
 import ru.topacademy.omni.data.db.OmniDatabase
@@ -33,6 +34,7 @@ class OmniRepository(private val context: Context) {
     private val db = OmniDatabase.getInstance(context)
     private val apiClient = OmniApiClient()
     private val sessionManager = OmniSessionManager(context)
+    val calendarSyncManager = CalendarSyncManager(context)
     private val gson = Gson()
     private val isoFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
@@ -144,10 +146,17 @@ class OmniRepository(private val context: Context) {
         }
     }
 
+    suspend fun syncCalendarNow(): Result<Int> = calendarSyncManager.syncFromDb(db)
+
+    suspend fun clearCalendar(): Result<Int> = calendarSyncManager.clearAll()
+
     suspend fun logout() {
         sessionManager.clearSession()
         sessionManager.clearCredentials()
         db.clearAllUserData()
+        try {
+            calendarSyncManager.onLogout()
+        } catch (_: Exception) {}
         try {
             ru.topacademy.omni.widget.ScheduleGlanceWidget().updateAll(context)
         } catch (_: Exception) {}
@@ -275,6 +284,13 @@ class OmniRepository(private val context: Context) {
         try {
             ru.topacademy.omni.widget.ScheduleGlanceWidget().updateAll(context)
         } catch (_: Exception) {}
+
+        // Sync to device calendar if enabled
+        if (weekOffset in 0..1 && calendarSyncManager.isEnabled()) {
+            try {
+                calendarSyncManager.syncFromDb(db)
+            } catch (_: Exception) {}
+        }
 
         if (fetchAttendance && weekOffset <= 0) {
             syncAttendanceForPastWeekLessons(weekOffset)

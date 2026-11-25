@@ -179,6 +179,15 @@ fun MainScreen(
         ProfileBottomSheet(
             profile = uiState.profile,
             isDarkTheme = uiState.isDarkTheme,
+            calendarSyncEnabled = uiState.calendarSyncEnabled,
+            selectedCalendarId = uiState.selectedCalendarId,
+            availableCalendars = uiState.availableCalendars,
+            calendarSyncedCount = uiState.calendarSyncedCount,
+            isCalendarSyncing = uiState.isCalendarSyncing,
+            calendarError = uiState.calendarError,
+            onToggleCalendarSync = { enabled -> viewModel.setCalendarSyncEnabled(enabled) },
+            onSelectCalendar = { id -> viewModel.selectCalendar(id) },
+            onSyncCalendarNow = { viewModel.syncCalendarNow() },
             onThemeChange = { isDark -> viewModel.setTheme(isDark) },
             onLogout = {
                 viewModel.closeProfileModal()

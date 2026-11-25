@@ -15,10 +15,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.core.content.ContextCompat
+import ru.topacademy.omni.data.calendar.DeviceCalendar
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,11 +77,20 @@ import ru.topacademy.omni.ui.theme.BlueAccent
 fun ProfileBottomSheet(
     profile: TeacherProfile?,
     isDarkTheme: Boolean,
+    calendarSyncEnabled: Boolean = false,
+    selectedCalendarId: Long = -1L,
+    availableCalendars: List<DeviceCalendar> = emptyList(),
+    calendarSyncedCount: Int = 0,
+    isCalendarSyncing: Boolean = false,
+    calendarError: String? = null,
+    onToggleCalendarSync: (Boolean) -> Unit = {},
+    onSelectCalendar: (Long) -> Unit = {},
+    onSyncCalendarNow: () -> Unit = {},
     onThemeChange: (Boolean) -> Unit,
     onLogout: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -231,6 +252,182 @@ fun ProfileBottomSheet(
                             color = if (!isDarkTheme) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             fontWeight = if (!isDarkTheme) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Calendar Sync Section
+            val calContext = LocalContext.current
+            var calendarDropdownOpen by remember { mutableStateOf(false) }
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { grants ->
+                val granted = (grants[Manifest.permission.READ_CALENDAR] == true) &&
+                    (grants[Manifest.permission.WRITE_CALENDAR] == true)
+                if (granted) {
+                    onToggleCalendarSync(true)
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                    .padding(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = if (isDarkTheme) AmberPrimary else BlueAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Синхронизация с Календарём",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (calendarSyncEnabled) {
+                                    if (isCalendarSyncing) "Синхронизация..." else "Синхронизировано пар: $calendarSyncedCount"
+                                } else {
+                                    "Отправка пар в Google Календарь"
+                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = calendarSyncEnabled,
+                        onCheckedChange = { wantEnabled ->
+                            if (wantEnabled) {
+                                val hasRead = ContextCompat.checkSelfPermission(calContext, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+                                val hasWrite = ContextCompat.checkSelfPermission(calContext, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+                                if (hasRead && hasWrite) {
+                                    onToggleCalendarSync(true)
+                                } else {
+                                    permissionLauncher.launch(
+                                        arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
+                                    )
+                                }
+                            } else {
+                                onToggleCalendarSync(false)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = if (isDarkTheme) AmberPrimary else BlueAccent
+                        )
+                    )
+                }
+
+                if (calendarSyncEnabled) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val selectedCal = availableCalendars.firstOrNull { it.id == selectedCalendarId }
+                        ?: availableCalendars.firstOrNull()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+                                    .clickable(enabled = availableCalendars.isNotEmpty()) { calendarDropdownOpen = true }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = selectedCal?.let {
+                                        if (it.accountName.isNotBlank() && it.accountName != it.displayName) {
+                                            "${it.displayName} (${it.accountName})"
+                                        } else it.displayName
+                                    } ?: "Нет доступных календарей",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.5.sp,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = calendarDropdownOpen,
+                                onDismissRequest = { calendarDropdownOpen = false }
+                            ) {
+                                availableCalendars.forEach { cal ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(cal.displayName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                                if (cal.accountName.isNotBlank()) {
+                                                    Text(cal.accountName, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            calendarDropdownOpen = false
+                                            onSelectCalendar(cal.id)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = onSyncCalendarNow,
+                            enabled = !isCalendarSyncing,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            if (isCalendarSyncing) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Синхронизировать",
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (!calendarError.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = calendarError,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
                         )
                     }
                 }
