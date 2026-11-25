@@ -1,0 +1,48 @@
+name: OmniTOP
+options:
+  bundleIdPrefix: ru.topacademy
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.4"
+
+packages:
+  SwiftSoup:
+    url: https://github.com/scinfu/SwiftSoup.git
+    from: "2.7.5"
+
+targets:
+  OmniTOP:
+    type: application
+    platform: iOS
+    sources:
+      - path: OmniTOP
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.topacademy.omni
+        INFOPLIST_FILE: OmniTOP/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OmniTOP/OmniTOP.entitlements
+        MARKETING_VERSION: "2.0.2"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - package: SwiftSoup
+      - target: OmniTOPWidget
+
+  OmniTOPWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: OmniTOPWidget
+      - path: OmniTOP/Models
+      - path: OmniTOP/Utils
+      - path: OmniTOP/Storage
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.topacademy.omni.widget
+        INFOPLIST_FILE: OmniTOPWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OmniTOPWidget/OmniTOPWidget.entitlements
+        MARKETING_VERSION: "2.0.2"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"

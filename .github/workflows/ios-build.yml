@@ -1,0 +1,51 @@
+name: iOS Build (Unsigned IPA)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || xcode-select -p
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Resolve Swift Package dependencies
+        working-directory: ios
+        run: xcodebuild -resolvePackageDependencies -project OmniTOP.xcodeproj -scheme OmniTOP
+
+      - name: Build unsigned Release app
+        working-directory: ios
+        run: |
+          xcodebuild clean build \
+            -project OmniTOP.xcodeproj \
+            -scheme OmniTOP \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/OmniTOP.app Payload/
+          zip -r OmniTOP-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniTOP-unsigned-ipa
+          path: ios/OmniTOP-unsigned.ipa
