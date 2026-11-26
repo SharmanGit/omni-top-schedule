@@ -98,6 +98,22 @@ fun MainScreen(
                 onDayClick = { viewModel.selectDay(it) }
             )
 
+            if (uiState.isOffline) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Офлайн-режим • показаны сохранённые данные",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
             // Lessons List
             if (filteredLessons.isEmpty()) {
                 Box(

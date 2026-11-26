@@ -127,6 +127,9 @@ interface LessonDao {
     @Query("DELETE FROM lessons WHERE date BETWEEN :startDate AND :endDate")
     suspend fun clearWeek(startDate: String, endDate: String)
 
+    @Query("DELETE FROM lessons WHERE date BETWEEN :startDate AND :endDate AND branchId IN (:branchIds)")
+    suspend fun clearWeekForBranches(startDate: String, endDate: String, branchIds: List<String>)
+
     @Query("DELETE FROM lessons")
     suspend fun clearAllLessons()
 

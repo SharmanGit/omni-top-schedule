@@ -269,6 +269,9 @@ class OmniApiClient {
             if (!resp.isSuccessful) {
                 return@withContext Result.failure(Exception("HTTP ${resp.code}"))
             }
+            if (!body.trimStart().startsWith("{")) {
+                return@withContext Result.failure(Exception("Некорректный ответ сервера (не JSON)"))
+            }
             Result.success(body)
         } catch (e: Exception) {
             Result.failure(e)
@@ -295,6 +298,9 @@ class OmniApiClient {
             checkSessionValid(resp.code, body)
             if (!resp.isSuccessful) {
                 return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            }
+            if (!body.trimStart().startsWith("{")) {
+                return@withContext Result.failure(Exception("Некорректный ответ сервера (не JSON)"))
             }
             Result.success(body)
         } catch (e: Exception) {
@@ -332,6 +338,9 @@ class OmniApiClient {
             checkSessionValid(resp.code, body)
             if (!resp.isSuccessful) {
                 return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            }
+            if (!body.trimStart().startsWith("{")) {
+                return@withContext Result.failure(Exception("Некорректный ответ сервера (не JSON)"))
             }
             Result.success(body)
         } catch (e: Exception) {

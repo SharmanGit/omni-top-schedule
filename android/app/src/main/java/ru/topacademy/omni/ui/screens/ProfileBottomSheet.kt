@@ -514,64 +514,72 @@ fun ProfileBottomSheet(
 
                 fun checkUpdates() {
                     scope.launch(Dispatchers.IO) {
-                        updateState = "CHECKING"
+                        withContext(Dispatchers.Main) {
+                            updateState = "CHECKING"
+                            updateErrorMsg = ""
+                        }
                         try {
-                            val client = OkHttpClient()
+                            val client = OkHttpClient.Builder()
+                                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                                .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                                .followRedirects(true)
+                                .build()
                             val request = Request.Builder()
                                 .url("https://api.github.com/repos/SharmanGit/omni-top-schedule/releases/latest")
                                 .header("Accept", "application/vnd.github.v3+json")
-                                .header("User-Agent", "OmniTOP-Android")
+                                .header("User-Agent", "OmniTOP-Android/$versionName")
                                 .build()
-                            val response = client.newCall(request).execute()
-                            if (response.isSuccessful) {
-                                val jsonStr = response.body?.string() ?: ""
-                                val json = JSONObject(jsonStr)
-                                val tagName = json.optString("tag_name", "").removePrefix("v")
-                                val htmlUrl = json.optString("html_url", "")
-                                var downloadUrl = htmlUrl
-                                val assets = json.optJSONArray("assets")
-                                if (assets != null) {
-                                    for (i in 0 until assets.length()) {
-                                        val asset = assets.getJSONObject(i)
-                                        val name = asset.optString("name", "")
-                                        if (name.endsWith(".apk")) {
-                                            downloadUrl = asset.optString("browser_download_url", htmlUrl)
-                                            break
+                            client.newCall(request).execute().use { response ->
+                                if (response.isSuccessful) {
+                                    val jsonStr = response.body?.string() ?: ""
+                                    val json = JSONObject(jsonStr)
+                                    val tagName = json.optString("tag_name", "").removePrefix("v").trim()
+                                    val htmlUrl = json.optString("html_url", "https://github.com/SharmanGit/omni-top-schedule/releases/latest")
+                                    var downloadUrl = htmlUrl
+                                    val assets = json.optJSONArray("assets")
+                                    if (assets != null) {
+                                        for (i in 0 until assets.length()) {
+                                            val asset = assets.getJSONObject(i)
+                                            val name = asset.optString("name", "")
+                                            if (name.endsWith(".apk", ignoreCase = true)) {
+                                                downloadUrl = asset.optString("browser_download_url", htmlUrl)
+                                                break
+                                            }
                                         }
                                     }
-                                }
 
-                                val curParts = versionName.removePrefix("v").split("-")[0].split(".").mapNotNull { it.toIntOrNull() }
-                                val newParts = tagName.split("-")[0].split(".").mapNotNull { it.toIntOrNull() }
-                                var isNewer = false
-                                val maxLen = maxOf(curParts.size, newParts.size)
-                                for (i in 0 until maxLen) {
-                                    val n = newParts.getOrElse(i) { 0 }
-                                    val c = curParts.getOrElse(i) { 0 }
-                                    if (n > c) {
-                                        isNewer = true
-                                        break
+                                    val curParts = versionName.removePrefix("v").split("-")[0].split(".").mapNotNull { it.toIntOrNull() }
+                                    val newParts = tagName.split("-")[0].split(".").mapNotNull { it.toIntOrNull() }
+                                    var isNewer = false
+                                    val maxLen = maxOf(curParts.size, newParts.size)
+                                    for (i in 0 until maxLen) {
+                                        val n = newParts.getOrElse(i) { 0 }
+                                        val c = curParts.getOrElse(i) { 0 }
+                                        if (n > c) {
+                                            isNewer = true
+                                            break
+                                        }
+                                        if (n < c) break
                                     }
-                                    if (n < c) break
-                                }
 
-                                withContext(Dispatchers.Main) {
-                                    if (isNewer && tagName.isNotEmpty()) {
-                                        latestVersionName = tagName
-                                        apkDownloadUrl = downloadUrl
-                                        updateState = "AVAILABLE"
-                                    } else {
+                                    withContext(Dispatchers.Main) {
+                                        if (isNewer && tagName.isNotEmpty()) {
+                                            latestVersionName = tagName
+                                            apkDownloadUrl = downloadUrl
+                                            updateState = "AVAILABLE"
+                                        } else {
+                                            updateState = "UP_TO_DATE"
+                                        }
+                                    }
+                                } else if (response.code == 404) {
+                                    withContext(Dispatchers.Main) {
                                         updateState = "UP_TO_DATE"
                                     }
-                                }
-                            } else if (response.code == 404) {
-                                withContext(Dispatchers.Main) {
-                                    updateState = "UP_TO_DATE"
-                                }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    updateErrorMsg = "Ошибка ${response.code}"
-                                    updateState = "ERROR"
+                                } else {
+                                    withContext(Dispatchers.Main) {
+                                        updateErrorMsg = "Ошибка HTTP ${response.code}"
+                                        updateState = "ERROR"
+                                    }
                                 }
                             }
                         } catch (e: Exception) {
@@ -622,16 +630,22 @@ fun ProfileBottomSheet(
                                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                             )
                             Text(
-                                text = "Разработано DLTD VDB ©",
+                                text = "SharmanGit / DLTD VDB © 2026",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isDarkTheme) AmberPrimary else BlueAccent
                             )
                             Text(
-                                text = "Клиент расписания, виджеты рабочего стола и журнал проверки ДЗ для преподавателей Академии ТОП.",
+                                text = "Клиент расписания, виджеты рабочего стола, синхронизация с календарём и журнал проверки ДЗ для преподавателей Академии ТОП.",
                                 fontSize = 11.5.sp,
                                 lineHeight = 16.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Неофициальный клиент. Все права защищены. Товарные знаки «Академия ТОП» и «Omni TOP» принадлежат их правообладателям.",
+                                fontSize = 10.5.sp,
+                                lineHeight = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
 
                             Box(
@@ -666,12 +680,21 @@ fun ProfileBottomSheet(
                                     }
                                 }
                                 "UP_TO_DATE" -> {
-                                    Text(
-                                        text = "✓ У вас установлена последняя версия",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color(0xFF10B981)
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "✓ Последняя версия (v$versionName)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF10B981)
+                                        )
+                                        TextButton(onClick = { checkUpdates() }) {
+                                            Text("Проверить", fontSize = 11.5.sp)
+                                        }
+                                    }
                                 }
                                 "AVAILABLE" -> {
                                     Column(
@@ -692,8 +715,13 @@ fun ProfileBottomSheet(
                                         )
                                         Button(
                                             onClick = {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apkDownloadUrl))
-                                                context.startActivity(intent)
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apkDownloadUrl))
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {
+                                                    updateErrorMsg = "Не удалось открыть браузер"
+                                                    updateState = "ERROR"
+                                                }
                                             },
                                             modifier = Modifier.fillMaxWidth().height(34.dp),
                                             colors = ButtonDefaults.buttonColors(
@@ -712,9 +740,10 @@ fun ProfileBottomSheet(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "Не удалось проверить",
+                                            text = updateErrorMsg.ifBlank { "Не удалось проверить" },
                                             fontSize = 11.5.sp,
-                                            color = MaterialTheme.colorScheme.error
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.weight(1f)
                                         )
                                         TextButton(onClick = { checkUpdates() }) {
                                             Text("Повторить", fontSize = 11.5.sp)

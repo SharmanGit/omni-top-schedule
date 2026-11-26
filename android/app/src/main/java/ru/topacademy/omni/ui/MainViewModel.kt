@@ -25,6 +25,7 @@ data class MainUiState(
     val isLoggedIn: Boolean = false,
     val isLoading: Boolean = false,
     val isSyncing: Boolean = false,
+    val isOffline: Boolean = false,
     val isDarkTheme: Boolean = true,
     val loginError: String? = null,
     val selectedWeekOffset: Int = 0,
@@ -32,7 +33,7 @@ data class MainUiState(
     val selectedBranchIds: Set<String> = emptySet(), // empty = All locations
     val profile: TeacherProfile? = null,
     val branches: List<Branch> = emptyList(),
-    val weekSchedule: WeekSchedule = WeekSchedule(0, ""),
+    val weekSchedule: WeekSchedule = OmniScheduleParser.getInitialWeekSchedule(0),
     val taskQueue: TaskQueue = TaskQueue(),
     val selectedLessonDetails: Lesson? = null,
     val isTasksSheetOpen: Boolean = false,
@@ -334,8 +335,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         syncWeekJob?.cancel()
         syncWeekJob = viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true) }
-            repository.syncWeekSchedule(weekOffset)
-            _uiState.update { it.copy(isSyncing = false) }
+            val res = repository.syncWeekSchedule(weekOffset)
+            _uiState.update { it.copy(isSyncing = false, isOffline = res.isFailure) }
+            if (res.isSuccess && weekOffset == 0) {
+                // Pre-cache next week silently for offline use
+                repository.syncWeekSchedule(1, fetchAttendance = false)
+            }
         }
     }
 

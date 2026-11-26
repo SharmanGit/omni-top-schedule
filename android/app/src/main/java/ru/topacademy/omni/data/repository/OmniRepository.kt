@@ -74,8 +74,9 @@ class OmniRepository(private val context: Context) {
             }
             db.profileDao().insertBranches(branchEntities)
 
-            // Initial sync of current week and tasks
+            // Initial sync of current week, next week (for offline), and tasks
             syncWeekSchedule(0)
+            syncWeekSchedule(1, fetchAttendance = false)
             syncTasks()
 
             // Refresh home screen widgets immediately
@@ -141,8 +142,9 @@ class OmniRepository(private val context: Context) {
             sessionManager.saveSession(updated)
             Result.success(updated)
         } else {
-            RepoLog.w("OmniRepo", "Failed to switch city to $targetCityId: ${res.exceptionOrNull()?.message}")
-            Result.success(session)
+            val err = res.exceptionOrNull() ?: Exception("Не удалось переключить филиал $targetCityId")
+            RepoLog.w("OmniRepo", "Failed to switch city to $targetCityId: ${err.message}")
+            Result.failure(err)
         }
     }
 
@@ -206,6 +208,10 @@ class OmniRepository(private val context: Context) {
         RepoLog.d("OmniRepo", "syncWeekSchedule for week=$weekOffset across ${branchesToQuery.size} branches")
 
         var hasRelogged = false
+        val succeededBranchIds = mutableSetOf<String>()
+        val failedBranchIds = mutableSetOf<String>()
+        var lastError: Throwable? = null
+
         // Fetch schedule for all branches associated with teacher
         for (branchSession in branchesToQuery) {
             val branch = Branch(
@@ -215,7 +221,14 @@ class OmniRepository(private val context: Context) {
                 colorHex = OmniScheduleParser.getBranchColor(branchSession.cityName, OmniScheduleParser.classifyBranch(branchSession.cityName))
             )
 
-            var activeSession = ensureCityActive(branch.cityId).getOrNull() ?: currentSession
+            val citySwitchRes = ensureCityActive(branch.cityId)
+            if (citySwitchRes.isFailure) {
+                lastError = citySwitchRes.exceptionOrNull()
+                failedBranchIds.add(branch.cityId)
+                RepoLog.e("OmniRepo", "Branch ${branch.cityName} city switch failed: ${lastError?.message}")
+                continue
+            }
+            var activeSession = citySwitchRes.getOrThrow()
 
             var schedRes = apiClient.fetchSchedule(
                 cookieStr = activeSession.cookieStr,
@@ -229,12 +242,15 @@ class OmniRepository(private val context: Context) {
                 if (refreshed != null) {
                     hasRelogged = true
                     currentSession = refreshed
-                    activeSession = ensureCityActive(branch.cityId).getOrNull() ?: currentSession
-                    schedRes = apiClient.fetchSchedule(
-                        cookieStr = activeSession.cookieStr,
-                        idLocalHash = activeSession.idLocalHash,
-                        weekOffset = weekOffset
-                    )
+                    val retrySwitch = ensureCityActive(branch.cityId)
+                    if (retrySwitch.isSuccess) {
+                        activeSession = retrySwitch.getOrThrow()
+                        schedRes = apiClient.fetchSchedule(
+                            cookieStr = activeSession.cookieStr,
+                            idLocalHash = activeSession.idLocalHash,
+                            weekOffset = weekOffset
+                        )
+                    }
                 }
             }
 
@@ -243,12 +259,21 @@ class OmniRepository(private val context: Context) {
                 val parsed = OmniScheduleParser.parseSchedule(raw, branch, weekOffset)
                 RepoLog.d("OmniRepo", "Branch ${branch.cityName} returned ${parsed.size} lessons (raw length=${raw.length})")
                 aggregatedLessons.addAll(parsed)
+                succeededBranchIds.add(branch.cityId)
             } else {
-                RepoLog.e("OmniRepo", "Branch ${branch.cityName} failed: ${schedRes.exceptionOrNull()?.message}")
+                lastError = schedRes.exceptionOrNull()
+                failedBranchIds.add(branch.cityId)
+                RepoLog.e("OmniRepo", "Branch ${branch.cityName} failed: ${lastError?.message}")
             }
         }
 
-        RepoLog.d("OmniRepo", "Total aggregated lessons: ${aggregatedLessons.size}")
+        RepoLog.d("OmniRepo", "Total aggregated lessons: ${aggregatedLessons.size} (succeeded=${succeededBranchIds.size}, failed=${failedBranchIds.size})")
+
+        // Never wipe cached Room schedule when offline or when all branches failed
+        if (succeededBranchIds.isEmpty()) {
+            RepoLog.w("OmniRepo", "All branches failed for week=$weekOffset; keeping existing cached schedule intact.")
+            return Result.failure(lastError ?: Exception("Не удалось загрузить расписание"))
+        }
 
         // Cache into Room: preserve attendance marks for current teacher's lessons if already known
         val existingLessons = try {
@@ -273,8 +298,12 @@ class OmniRepository(private val context: Context) {
             LessonEntity.fromDomain(lesson.copy(isAttendanceMarked = marked))
         }
 
-        // CRUCIAL: Clear the week range in Room so any canceled/displaced lessons are removed
-        db.lessonDao().clearWeek(startDate, endDate)
+        // Clear only the branches that actually succeeded (or full week if all branches succeeded)
+        if (failedBranchIds.isEmpty()) {
+            db.lessonDao().clearWeek(startDate, endDate)
+        } else {
+            db.lessonDao().clearWeekForBranches(startDate, endDate, succeededBranchIds.toList())
+        }
         if (entities.isNotEmpty()) {
             db.lessonDao().insertLessons(entities)
         }
@@ -339,8 +368,11 @@ class OmniRepository(private val context: Context) {
         val seenStudentNames = mutableSetOf<String>()
 
         var hasRelogged = false
+        var anyTasksSucceeded = false
         for (b in branchesToQuery) {
-            var activeSession = ensureCityActive(b.cityId).getOrNull() ?: currentSession
+            val citySwitchRes = ensureCityActive(b.cityId)
+            if (citySwitchRes.isFailure) continue
+            var activeSession = citySwitchRes.getOrThrow()
             var tasksRes = apiClient.fetchTasks(activeSession.cookieStr, activeSession.idLocalHash)
 
             if (tasksRes.isFailure && tasksRes.exceptionOrNull() is OmniApiClient.SessionExpiredException && !hasRelogged) {
@@ -349,12 +381,16 @@ class OmniRepository(private val context: Context) {
                 if (refreshed != null) {
                     hasRelogged = true
                     currentSession = refreshed
-                    activeSession = ensureCityActive(b.cityId).getOrNull() ?: currentSession
-                    tasksRes = apiClient.fetchTasks(activeSession.cookieStr, activeSession.idLocalHash)
+                    val retrySwitch = ensureCityActive(b.cityId)
+                    if (retrySwitch.isSuccess) {
+                        activeSession = retrySwitch.getOrThrow()
+                        tasksRes = apiClient.fetchTasks(activeSession.cookieStr, activeSession.idLocalHash)
+                    }
                 }
             }
 
             if (tasksRes.isSuccess) {
+                anyTasksSucceeded = true
                 val parsed = OmniScheduleParser.parseTasks(tasksRes.getOrThrow())
                 totalHw += parsed.newHomeworkCount
                 totalReviews += parsed.pendingReviewsCount
@@ -367,6 +403,10 @@ class OmniRepository(private val context: Context) {
                     }
                 }
             }
+        }
+
+        if (!anyTasksSucceeded) {
+            return Result.failure(Exception("Не удалось обновить очередь задач"))
         }
 
         val entity = TaskQueueEntity(
